@@ -1,0 +1,9 @@
+{
+  "name": "bijutsu-board-maker",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "format": "npx -y prettier@3.6.2 --write src/"
+  }
+}

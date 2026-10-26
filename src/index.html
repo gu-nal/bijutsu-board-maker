@@ -1,0 +1,241 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <meta
+      name="description"
+      content="案件名、レシピ、写真から撮影用の美術資料を組み立てるツール"
+    />
+    <title>美術資料メーカー</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="brand">
+        <div class="brand-mark">美</div>
+        <div>美術資料メーカー<small>ART DIRECTION BOARD</small></div>
+      </div>
+      <div class="top-actions">
+        <span class="saved" id="savedStatus">この端末に自動保存</span
+        ><button class="btn small" id="backupBtn">バックアップ</button
+        ><button class="btn small" id="restoreBtn">読み込み</button
+        ><input
+          id="restoreFile"
+          type="file"
+          accept=".json,application/json"
+          hidden
+        /><button class="btn primary" id="printBtn">PDFを書き出す</button>
+      </div>
+    </header>
+    <main class="page">
+      <div class="intro">
+        <div>
+          <h1>撮影のイメージを、ひとつの資料に。</h1>
+          <p>
+            案件名・レシピ・ベース写真を入れると、写真を見やすく整列してA4資料にします。
+          </p>
+        </div>
+        <button class="btn small" id="resetBtn">新しい案件</button>
+      </div>
+      <div class="library" id="library">
+        <div class="library-head">
+          <strong>過去に作った資料</strong
+          ><span id="libraryCount">保存した案件はこの端末に保管されます</span
+          ><button class="btn small" type="button" id="libraryToggle">
+            折りたたむ
+          </button>
+        </div>
+        <div class="library-tools">
+          <input
+            id="librarySearch"
+            placeholder="案件名・料理名で検索"
+            aria-label="保存した資料を検索"
+          />
+        </div>
+        <div class="library-list" id="libraryList"></div>
+        <div class="library-empty" id="libraryEmpty" hidden>
+          保存した資料はまだありません。案件を作ると自動でストックされます。
+        </div>
+      </div>
+      <div class="layout">
+        <section class="editor">
+          <div class="panel">
+            <div class="panel-head">
+              <span class="step">1</span>
+              <h2>案件の基本情報</h2>
+            </div>
+            <div class="panel-body">
+              <div class="field">
+                <label>案件名<span class="req">*</span></label
+                ><input
+                  class="input"
+                  id="projectName"
+                  placeholder="例：春のパスタ スチール撮影"
+                />
+              </div>
+              <div class="row">
+                <div class="field">
+                  <label>ブランド・商品</label
+                  ><input
+                    class="input"
+                    id="brandName"
+                    placeholder="例：キユーピー"
+                  />
+                  <div class="logo-tools">
+                    <button type="button" class="paste-brand-logo">
+                      コピーしたロゴ画像を貼り付け</button
+                    ><label
+                      >画像を選ぶ<input
+                        id="brandLogoInput"
+                        type="file"
+                        accept="image/*"
+                        hidden /></label
+                    ><button
+                      type="button"
+                      id="removeBrandLogo"
+                      style="display: none"
+                    >
+                      ロゴを削除
+                    </button>
+                  </div>
+                  <img
+                    id="brandLogoPreview"
+                    class="logo-preview"
+                    alt="ブランドロゴのプレビュー"
+                    onerror="this.style.display='none'"
+                  />
+                </div>
+                <div class="field">
+                  <label>撮影日</label
+                  ><input class="input" id="shootDate" type="date" />
+                </div>
+              </div>
+              <div class="field">
+                <label>料理・レシピ名</label
+                ><input
+                  class="input"
+                  id="dishName"
+                  placeholder="例：ツナと春野菜のパスタ"
+                />
+              </div>
+              <div class="field">
+                <label>レシピ・撮影メモ</label
+                ><textarea
+                  class="textarea"
+                  id="recipeNotes"
+                  placeholder="材料、盛り付け、調理工程、見せたいポイントなどを入力"
+                ></textarea>
+                <p class="hint">
+                  材料、盛り付け、調理工程、見せたいポイントなどを入力してください。
+                </p>
+              </div>
+              <div class="field">
+                <label>資料のアクセントカラー</label>
+                <div class="color-row" id="colorRow">
+                  <button
+                    class="color-opt active"
+                    data-color="#507b58"
+                    style="background: #507b58"
+                    aria-label="グリーン"
+                  ></button
+                  ><button
+                    class="color-opt"
+                    data-color="#3569a5"
+                    style="background: #3569a5"
+                    aria-label="ブルー"
+                  ></button
+                  ><button
+                    class="color-opt"
+                    data-color="#bd514a"
+                    style="background: #bd514a"
+                    aria-label="レッド"
+                  ></button
+                  ><button
+                    class="color-opt"
+                    data-color="#8a6b43"
+                    style="background: #8a6b43"
+                    aria-label="ブラウン"
+                  ></button
+                  ><button
+                    class="color-opt"
+                    data-color="#706a88"
+                    style="background: #706a88"
+                    aria-label="パープル"
+                  ></button>
+                </div>
+                <div class="field">
+                  <label for="headingFontSize"
+                    >資料見出しの文字サイズ
+                    <span id="headingFontSizeValue">12 pt</span></label
+                  ><input
+                    class="input"
+                    id="headingFontSize"
+                    type="range"
+                    min="9"
+                    max="24"
+                    step="1"
+                    value="12"
+                  />
+                  <p class="hint">ベース・天板・各カテゴリ名に反映します。</p>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="panel">
+            <div class="panel-head">
+              <span class="step">2</span>
+              <h2 id="basePanelHeading">ベース写真</h2>
+            </div>
+            <div class="panel-body">
+              <div class="drop" id="baseDrop">
+                <input id="baseInput" type="file" accept="image/*" />
+                <div>
+                  <strong>ベース写真をドロップ、またはクリックして選択</strong
+                  ><span>この写真を資料の1ページ目に大きく配置します</span>
+                </div>
+              </div>
+              <div class="base-preview" id="basePreview">
+                <img id="baseImage" alt="ベース写真" /><button
+                  class="remove"
+                  id="removeBase"
+                  title="写真を削除"
+                >
+                  ×
+                </button>
+              </div>
+              <div class="field">
+                <label for="baseHeading">ベース写真の見出し</label
+                ><input class="input" id="baseHeading" value="ベースイメージ" />
+              </div>
+            </div>
+          </div>
+          <div class="panel">
+            <div class="panel-head">
+              <span class="step">3</span>
+              <h2>シーン別の参考写真</h2>
+            </div>
+            <div class="panel-body">
+              <div id="sections"></div>
+              <p class="hint">
+                セットを追加すると、別レシピ・別シーンの参考写真を分けて管理できます。各セットは折りたたみ、カテゴリの追加・削除もできます。
+              </p>
+            </div>
+          </div>
+        </section>
+        <section class="preview-wrap">
+          <div class="preview-head">
+            <strong>資料プレビュー</strong
+            ><span id="pageCount">入力すると自動更新されます</span>
+          </div>
+          <div id="preview"></div>
+          <p class="footer-note">
+            写真とカテゴリはページ内に収まるよう詰めて配置し、入りきらない分は次のページに続けます。入力データはこのブラウザー内に保存されます。
+          </p>
+        </section>
+      </div>
+    </main>
+    <div class="toast" id="toast"></div>
+    <script src="app.js"></script>
+  </body>
+</html>
