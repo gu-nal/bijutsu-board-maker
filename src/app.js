@@ -276,10 +276,185 @@ function fileData(file) {
     r.readAsDataURL(file);
   });
 }
+// 動画ファイル本体は state に入れず、IndexedDB の "media:<id>" に Blob のまま保存する。
+// state 側の写真データには代表コマ（src）と mediaId / videoUrl だけを持たせる。
+async function putMedia(mediaId, blob) {
+  const db = await dbReady,
+    tx = db.transaction(STORE, "readwrite");
+  tx.objectStore(STORE).put({ kind: "media", blob }, "media:" + mediaId);
+  return new Promise((resolve, reject) => {
+    tx.oncomplete = resolve;
+    tx.onerror = () => reject(tx.error);
+  });
+}
+async function getMedia(mediaId) {
+  const db = await dbReady;
+  return new Promise((resolve) => {
+    const req = db
+      .transaction(STORE)
+      .objectStore(STORE)
+      .get("media:" + mediaId);
+    req.onsuccess = () => resolve(req.result?.blob || null);
+    req.onerror = () => resolve(null);
+  });
+}
+function videoPlaceholder(label) {
+  const svg =
+    '<svg xmlns="http://www.w3.org/2000/svg" width="640" height="360"><rect width="640" height="360" fill="#2b302d"/><circle cx="320" cy="160" r="46" fill="#fff" fill-opacity=".9"/><path d="M305 135v50l42-25z" fill="#2b302d"/><text x="320" y="255" fill="#fff" font-family="sans-serif" font-size="24" text-anchor="middle">' +
+    esc(label || "動画") +
+    "</text></svg>";
+  return "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svg);
+}
+function videoPoster(src, crossOrigin) {
+  return new Promise((resolve) => {
+    const v = document.createElement("video");
+    let finished = false;
+    const done = (poster, duration = 0) => {
+      if (finished) return;
+      finished = true;
+      v.removeAttribute("src");
+      v.load();
+      resolve({ poster, duration });
+    };
+    v.muted = true;
+    v.playsInline = true;
+    v.preload = "auto";
+    if (crossOrigin) v.crossOrigin = "anonymous";
+    v.onloadedmetadata = () => {
+      v.currentTime = Math.min(1, (v.duration || 0) / 2);
+    };
+    v.onseeked = () => {
+      try {
+        const scale = Math.min(1, 1600 / (v.videoWidth || 1600)),
+          c = document.createElement("canvas");
+        c.width = Math.round((v.videoWidth || 640) * scale);
+        c.height = Math.round((v.videoHeight || 360) * scale);
+        c.getContext("2d").drawImage(v, 0, 0, c.width, c.height);
+        done(c.toDataURL("image/jpeg", 0.85), v.duration);
+      } catch {
+        done(null, v.duration);
+      }
+    };
+    v.onerror = () => done(null);
+    setTimeout(() => done(null), 15000);
+    v.src = src;
+  });
+}
+function youtubeId(url) {
+  const m = url.match(
+    /(?:youtu\.be\/|youtube\.com\/(?:watch\?(?:.*&)?v=|shorts\/|embed\/|live\/))([\w-]{11})/,
+  );
+  return m ? m[1] : "";
+}
+function isVideoUrl(parsed) {
+  return (
+    /(^|\.)(youtube\.com|youtu\.be|vimeo\.com|tiktok\.com)$/i.test(
+      parsed.hostname,
+    ) ||
+    (/(^|\.)instagram\.com$/i.test(parsed.hostname) &&
+      /\/(reel|reels|p|tv)\//.test(parsed.pathname)) ||
+    /\.(mp4|mov|m4v|webm)(?:$|[?#])/i.test(parsed.href)
+  );
+}
+async function videoFromUrl(url) {
+  const yt = youtubeId(url);
+  if (yt)
+    return {
+      src: "https://i.ytimg.com/vi/" + yt + "/hqdefault.jpg",
+      fallback: videoPlaceholder("YouTube"),
+      source: "YouTube",
+    };
+  const parsed = new URL(url);
+  if (/\.(mp4|mov|m4v|webm)(?:$|[?#])/i.test(parsed.href)) {
+    const { poster } = await videoPoster(url, true);
+    return {
+      src: poster || videoPlaceholder("動画"),
+      source: "動画URLから追加",
+    };
+  }
+  const host = parsed.hostname.replace(/^www\./, "");
+  return { src: videoPlaceholder(host), source: host };
+}
+function formatDuration(sec) {
+  if (!sec || !isFinite(sec)) return "";
+  const s = Math.round(sec);
+  return Math.floor(s / 60) + ":" + String(s % 60).padStart(2, "0");
+}
+async function openVideo(im) {
+  if (!im) return;
+  const yt = im.videoUrl ? youtubeId(im.videoUrl) : "";
+  let body;
+  if (im.mediaId) {
+    const blob = await getMedia(im.mediaId);
+    if (!blob)
+      return toast("動画ファイルが見つかりません。もう一度追加してください");
+    body =
+      '<video controls autoplay playsinline src="' +
+      URL.createObjectURL(blob) +
+      '"></video>';
+  } else if (yt) {
+    body =
+      '<iframe src="https://www.youtube.com/embed/' +
+      yt +
+      '?autoplay=1" allow="autoplay; encrypted-media; picture-in-picture" allowfullscreen></iframe>';
+  } else if (/\.(mp4|mov|m4v|webm)(?:$|[?#])/i.test(im.videoUrl || "")) {
+    body =
+      '<video controls autoplay playsinline src="' +
+      esc(im.videoUrl) +
+      '"></video>';
+  } else if (im.videoUrl) {
+    window.open(im.videoUrl, "_blank", "noopener");
+    return;
+  } else return;
+  const modal = document.createElement("div");
+  modal.className = "video-modal";
+  modal.innerHTML =
+    '<div class="video-modal-inner">' +
+    body +
+    '<button class="video-modal-close" aria-label="閉じる">×</button></div>';
+  const close = () => {
+    const v = modal.querySelector("video");
+    if (v?.src.startsWith("blob:")) URL.revokeObjectURL(v.src);
+    modal.remove();
+  };
+  modal.onclick = (e) => {
+    if (e.target === modal || e.target.closest(".video-modal-close")) close();
+  };
+  document.body.appendChild(modal);
+}
+function findImage(imageId) {
+  for (const s of state.sections) {
+    const im = (s.images || []).find((x) => x.id === imageId);
+    if (im) return im;
+  }
+}
 async function addImages(sectionId, files) {
   const section = state.sections.find((s) => s.id === sectionId);
   if (!section) return;
   for (const file of [...files]) {
+    if (file.type.startsWith("video/")) {
+      toast("動画を読み込んでいます…");
+      const mediaId = id(),
+        url = URL.createObjectURL(file),
+        { poster, duration } = await videoPoster(url);
+      URL.revokeObjectURL(url);
+      try {
+        await putMedia(mediaId, file);
+      } catch {
+        toast("動画を保存できませんでした（容量不足の可能性があります）");
+        continue;
+      }
+      section.images.push({
+        id: id(),
+        kind: "video",
+        mediaId,
+        duration,
+        src: poster || videoPlaceholder(file.name),
+        title: file.name.replace(/\.[^.]+$/, ""),
+        source: "端末から追加（動画）",
+      });
+      continue;
+    }
     if (!file.type.startsWith("image/")) continue;
     const src = await fileData(file);
     section.images.push({
@@ -630,9 +805,15 @@ function sectionMarkup(s, idx) {
         (im, imageIndex) =>
           '<div class="image-item" data-image="' +
           esc(im.id) +
+          '"><div class="image-thumb' +
+          (im.kind === "video" ? " is-video" : "") +
           '"><img src="' +
           esc(im.src) +
-          '" alt=""><div class="image-meta"><input data-image-key="title" value="' +
+          '" alt="">' +
+          (im.kind === "video"
+            ? '<button type="button" class="video-play" title="動画を再生">▶</button>'
+            : "") +
+          '</div><div class="image-meta"><input data-image-key="title" value="' +
           esc(
             ["コピーした参考画像", "コピーした画像"].includes(im.title)
               ? ""
@@ -649,7 +830,7 @@ function sectionMarkup(s, idx) {
           '>↓</button><button class="iconbtn delete-image" title="写真を削除">×</button></div></div>',
       )
       .join("") +
-    '</div><div class="url-row"><input class="input image-url" placeholder="画像ファイルのURL"><button class="btn small add-url">URL追加</button><label class="btn small file-add">写真を選ぶ<input type="file" accept="image/*" multiple></label></div><button type="button" class="paste-images" aria-label="コピーした画像を貼り付け">検索先で画像をコピーしたら、ここをクリックして ⌘V<br>候補として追加し、不要なものは × で外せます</button></div></div>'
+    '</div><div class="url-row"><input class="input image-url" placeholder="画像・動画のURL（YouTube等も可）"><button class="btn small add-url">URL追加</button><label class="btn small file-add">写真・動画を選ぶ<input type="file" accept="image/*,video/*" multiple></label></div><button type="button" class="paste-images" aria-label="コピーした画像を貼り付け">検索先で画像をコピーしたら、ここをクリックして ⌘V<br>候補として追加し、不要なものは × で外せます</button></div></div>'
   );
 }
 function renderSections() {
@@ -831,6 +1012,13 @@ function renderSections() {
         renderPreview();
       }),
   );
+  root
+    .querySelectorAll(".video-play")
+    .forEach(
+      (el) =>
+        (el.onclick = () =>
+          openVideo(findImage(el.closest(".image-item").dataset.image))),
+    );
   root.querySelectorAll(".delete-image").forEach(
     (el) =>
       (el.onclick = () => {
@@ -1000,6 +1188,21 @@ function renderSections() {
             return;
           }
           if (!/^https?:$/.test(parsed.protocol)) throw Error();
+          if (isVideoUrl(parsed)) {
+            const video = await videoFromUrl(url);
+            s.images.push({
+              id: id(),
+              kind: "video",
+              videoUrl: url,
+              title: "参考動画",
+              ...video,
+            });
+            field.value = "";
+            persist();
+            renderSections();
+            renderPreview();
+            return;
+          }
           s.images.push({
             id: id(),
             src: url,
@@ -1011,7 +1214,7 @@ function renderSections() {
           renderSections();
           renderPreview();
         } catch {
-          toast("有効な画像URLを入力してください");
+          toast("有効な画像・動画のURLを入力してください");
         }
       }),
   );
@@ -1074,6 +1277,13 @@ function imageCard(im, number) {
       esc(im.sourceUrl) +
       '" target="_blank" rel="noopener">出典 ↗</a>'
     : "";
+  const isVideo = im.kind === "video",
+    videoLink =
+      isVideo && im.videoUrl
+        ? '<a href="' +
+          esc(im.videoUrl) +
+          '" target="_blank" rel="noopener">動画を見る ↗</a>'
+        : "";
   const title =
     im.title && !["コピーした参考画像", "コピーした画像"].includes(im.title)
       ? im.title
@@ -1081,15 +1291,18 @@ function imageCard(im, number) {
   const source =
     im.source && im.source !== "クリップボードから追加" ? im.source : "";
   const caption =
-    title || source || sourceLink
+    title || source || sourceLink || videoLink
       ? "<figcaption>" +
         (title ? esc(title) : "") +
         (source ? " · " + esc(source) : "") +
         (sourceLink ? " · " + sourceLink : "") +
+        (videoLink ? " · " + videoLink : "") +
         "</figcaption>"
       : "";
   return (
-    '<figure class="board-card" data-image-id="' +
+    '<figure class="board-card' +
+    (isVideo ? " is-video" : "") +
+    '" data-image-id="' +
     esc(im.id) +
     '" data-layout-row="' +
     (Number(im.layoutRow) || "") +
@@ -1102,6 +1315,13 @@ function imageCard(im, number) {
     ' alt="' +
     esc(title) +
     '" onload="refreshMosaics()">' +
+    (isVideo
+      ? '<button type="button" class="video-badge" title="動画を再生">▶' +
+        (formatDuration(im.duration)
+          ? "<span>" + formatDuration(im.duration) + "</span>"
+          : "") +
+        "</button>"
+      : "") +
     caption +
     "</figure>"
   );
@@ -1324,23 +1544,21 @@ function renderPreview() {
       : null,
   });
   if (tabletop && tableChunks.length > 1)
-    tableChunks
-      .slice(1)
-      .forEach((chunk) =>
-        pages.push({
-          type: "packed",
-          groupLabel: "",
-          blocks: [
-            {
-              s: chunk.s,
-              imgs: chunk.imgs,
-              start: chunk.start,
-              continued: true,
-              weight: 9,
-            },
-          ],
-        }),
-      );
+    tableChunks.slice(1).forEach((chunk) =>
+      pages.push({
+        type: "packed",
+        groupLabel: "",
+        blocks: [
+          {
+            s: chunk.s,
+            imgs: chunk.imgs,
+            start: chunk.start,
+            continued: true,
+            weight: 9,
+          },
+        ],
+      }),
+    );
   function packSections(sections, label) {
     let blocks = [];
     for (const sec of sections) {
@@ -1760,8 +1978,18 @@ document.getElementById("printBtn").onclick = () => {
   if (!state.projectName.trim()) toast("先に案件名を入力してください");
   setTimeout(() => window.print(), 100);
 };
-document.getElementById("backupBtn").onclick = () => {
-  const blob = new Blob([JSON.stringify(state)], { type: "application/json" }),
+document.getElementById("backupBtn").onclick = async () => {
+  // 動画ファイルは state の外にあるので、データURLにしてバックアップに同梱する
+  const media = {};
+  for (const s of state.sections)
+    for (const im of s.images || [])
+      if (im.mediaId && !media[im.mediaId]) {
+        const file = await getMedia(im.mediaId);
+        if (file) media[im.mediaId] = await fileData(file);
+      }
+  const blob = new Blob([JSON.stringify({ ...state, media })], {
+      type: "application/json",
+    }),
     a = document.createElement("a");
   a.href = URL.createObjectURL(blob);
   a.download =
@@ -1777,6 +2005,9 @@ document.getElementById("restoreFile").onchange = async (e) => {
   try {
     const obj = JSON.parse(await e.target.files[0].text());
     if (!obj || !Array.isArray(obj.sections)) throw Error();
+    for (const [mediaId, dataUrl] of Object.entries(obj.media || {}))
+      await putMedia(mediaId, await (await fetch(dataUrl)).blob());
+    delete obj.media;
     state = { ...state, ...obj };
     persist();
     restoreUI();
@@ -1807,6 +2038,10 @@ document.getElementById("libraryToggle").onclick = () => {
     ? "開く"
     : "折りたたむ";
 };
+document.getElementById("preview").addEventListener("click", (e) => {
+  const badge = e.target.closest(".video-badge");
+  if (badge) openVideo(findImage(badge.closest(".board-card").dataset.imageId));
+});
 dbReady.then(async () => {
   await saveStateNow();
   restoreUI();
