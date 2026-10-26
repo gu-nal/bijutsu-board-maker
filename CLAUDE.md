@@ -1,6 +1,7 @@
 # 美術資料メーカー
 
 撮影用の「美術資料」（ベース写真＋天板・お皿・クロスなどの参考写真を並べたA4資料）を作るブラウザーアプリ。
+公開URL: https://gu-nal.github.io/bijutsu-board-maker/ （GitHub Pages、リポジトリ gu-nal/bijutsu-board-maker）
 元は Codex で作成し、ChatGPT Sites（https://bijutsu-board-maker.activedegu.chatgpt.site/ ）で公開していたもの。
 
 ## 構成
@@ -10,7 +11,8 @@
 - `src/app.js` … ロジック全体（保存・検索・レイアウト・プレビュー）
 - `scripts/build.mjs` … 上の3つを1ファイルに結合して `dist/index.html` を出力する
 - `dist/index.html` … 公開用の単一HTML（**直接編集しない**。必ず `src/` を直してビルドする）
-- `.openai/hosting.json` … ChatGPT Sites のプロジェクト設定（公開ディレクトリは `dist`）
+- `.github/workflows/pages.yml` … main に push するとビルドして GitHub Pages へ公開する
+- `.openai/hosting.json` … 旧公開先 ChatGPT Sites のプロジェクト設定（公開ディレクトリは `dist`）
 
 ## 更新の手順
 
@@ -18,6 +20,7 @@
 2. `npm run build` で `dist/index.html` を再生成する
 3. `dist/index.html` をブラウザーで開いて確認する
 4. `src/` と `dist/` を両方コミットする
+5. `git push github HEAD:main` で公開（GitHub Actions が数十秒〜1分で反映）
 
 外部ライブラリは使っていない（ビルドは Node 標準機能のみ）。
 
