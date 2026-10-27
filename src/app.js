@@ -856,7 +856,9 @@ function renderSections() {
     (state.sceneGroups || [])
       .map(
         (g, gi) =>
-          '<div class="scene-group" data-group-id="' +
+          '<div class="scene-group' +
+          (g.collapsed ? " is-collapsed" : "") +
+          '" data-group-id="' +
           esc(g.id) +
           '"><div class="scene-group-head"><span class="step">' +
           (gi + 1) +
@@ -864,7 +866,13 @@ function renderSections() {
           esc(g.id) +
           '" value="' +
           esc(g.title || "カット" + (gi + 1)) +
-          '" aria-label="カット名" placeholder="カット名（例：カット1 寄り）"><button class="scene-toggle" type="button" aria-expanded="true" title="折りたたむ">⌄</button><button class="iconbtn delete-scene-group" type="button" title="カットを削除">×</button></div><div class="scene-group-body">' +
+          '" aria-label="カット名" placeholder="カット名（例：カット1 寄り）"><button class="scene-toggle" type="button" aria-expanded="' +
+          String(!g.collapsed) +
+          '" title="' +
+          (g.collapsed ? "開く" : "折りたたむ") +
+          '">' +
+          (g.collapsed ? "›" : "⌄") +
+          '</button><button class="iconbtn delete-scene-group" type="button" title="カットを削除">×</button></div><div class="scene-group-body">' +
           cutBaseMarkup(g) +
           state.sections
             .filter(
@@ -892,9 +900,15 @@ function renderSections() {
     (el) =>
       (el.onclick = () => {
         const group = el.closest(".scene-group"),
-          collapsed = group.classList.toggle("is-collapsed");
+          collapsed = group.classList.toggle("is-collapsed"),
+          g = state.sceneGroups.find((x) => x.id === group.dataset.groupId);
+        if (g) {
+          g.collapsed = collapsed;
+          persist();
+        }
         el.textContent = collapsed ? "›" : "⌄";
         el.setAttribute("aria-expanded", String(!collapsed));
+        el.title = collapsed ? "開く" : "折りたたむ";
       }),
   );
   root.querySelectorAll(".delete-scene-group").forEach(
