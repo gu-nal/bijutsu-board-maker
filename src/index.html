@@ -33,7 +33,7 @@
         <div>
           <h1>撮影のイメージを、ひとつの資料に。</h1>
           <p>
-            案件名・レシピ・ベース写真を入れると、写真を見やすく整列してA4資料にします。
+            案件名・レシピと、カットごとのベース写真・参考写真を入れると、写真を見やすく整列してA4資料にします。
           </p>
         </div>
         <button class="btn small" id="resetBtn">新しい案件</button>
@@ -179,46 +179,23 @@
                   />
                   <p class="hint">ベース・天板・各カテゴリ名に反映します。</p>
                 </div>
+                <div class="field">
+                  <label for="baseHeading">ベース写真の見出し</label
+                  ><input class="input" id="baseHeading" value="ベースイメージ" />
+                  <p class="hint">各カットのベース写真の上に表示します。</p>
+                </div>
               </div>
             </div>
           </div>
           <div class="panel">
             <div class="panel-head">
               <span class="step">2</span>
-              <h2 id="basePanelHeading">ベース写真</h2>
-            </div>
-            <div class="panel-body">
-              <div class="drop" id="baseDrop">
-                <input id="baseInput" type="file" accept="image/*" />
-                <div>
-                  <strong>ベース写真をドロップ、またはクリックして選択</strong
-                  ><span>この写真を資料の1ページ目に大きく配置します</span>
-                </div>
-              </div>
-              <div class="base-preview" id="basePreview">
-                <img id="baseImage" alt="ベース写真" /><button
-                  class="remove"
-                  id="removeBase"
-                  title="写真を削除"
-                >
-                  ×
-                </button>
-              </div>
-              <div class="field">
-                <label for="baseHeading">ベース写真の見出し</label
-                ><input class="input" id="baseHeading" value="ベースイメージ" />
-              </div>
-            </div>
-          </div>
-          <div class="panel">
-            <div class="panel-head">
-              <span class="step">3</span>
-              <h2>シーン別の参考写真</h2>
+              <h2>撮影カット詳細</h2>
             </div>
             <div class="panel-body">
               <div id="sections"></div>
               <p class="hint">
-                セットを追加すると、別レシピ・別シーンの参考写真を分けて管理できます。各セットは折りたたみ、カテゴリの追加・削除もできます。
+                カットごとにベース写真と、天板・お皿・クロスなどの参考写真をまとめます。「＋ カットを追加」で何カットでも増やせます。
               </p>
             </div>
           </div>

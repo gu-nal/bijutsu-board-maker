@@ -18,10 +18,9 @@ let state = {
   accent: "#507b58",
   headingFontSize: 12,
   baseImageTitle: "ベースイメージ",
-  base: null,
   brandLogo: null,
   sectionPresetVersion: 0,
-  sceneGroups: [{ id: "scene1", title: "シーン別の参考写真" }],
+  sceneGroups: [{ id: "scene1", title: "カット1", base: null }],
   sections: defaults.map((s, i) => ({
     ...s,
     id: "s" + i,
@@ -228,10 +227,9 @@ function makeBlankProject() {
     accent: "#507b58",
     headingFontSize: 12,
     baseImageTitle: "ベースイメージ",
-    base: null,
     brandLogo: null,
     sectionPresetVersion: 0,
-    sceneGroups: [{ id: groupId, title: "シーン別の参考写真" }],
+    sceneGroups: [{ id: groupId, title: "カット1", base: null }],
     sections: defaults.map((s) => ({
       ...s,
       id: id(),
@@ -833,6 +831,25 @@ function sectionMarkup(s, idx) {
     '</div><div class="url-row"><input class="input image-url" placeholder="画像・動画のURL（YouTube等も可）"><button class="btn small add-url">URL追加</button><label class="btn small file-add">写真・動画を選ぶ<input type="file" accept="image/*,video/*" multiple></label></div><button type="button" class="paste-images" aria-label="コピーした画像を貼り付け">検索先で画像をコピーしたら、ここをクリックして ⌘V<br>候補として追加し、不要なものは × で外せます</button></div></div>'
   );
 }
+function cutBaseMarkup(g) {
+  return (
+    '<div class="cut-base"><div class="cut-base-label">' +
+    esc(state.baseImageTitle || "ベースイメージ") +
+    "</div>" +
+    (g.base
+      ? '<div class="base-preview" style="display:block"><img src="' +
+        esc(g.base) +
+        '" alt="ベース写真"><button class="remove cut-base-remove" type="button" data-base-group="' +
+        esc(g.id) +
+        '" title="写真を削除">×</button></div>'
+      : '<div class="drop" data-base-group="' +
+        esc(g.id) +
+        '"><input class="cut-base-input" type="file" accept="image/*" data-base-group="' +
+        esc(g.id) +
+        '"><div><strong>ベース写真をドロップ、またはクリックして選択</strong><span>このカットのページに大きく配置します</span></div></div>') +
+    "</div>"
+  );
+}
 function renderSections() {
   const root = document.getElementById("sections");
   root.innerHTML =
@@ -842,12 +859,13 @@ function renderSections() {
           '<div class="scene-group" data-group-id="' +
           esc(g.id) +
           '"><div class="scene-group-head"><span class="step">' +
-          (gi + 3) +
+          (gi + 1) +
           '</span><input class="scene-group-title" data-group-title="' +
           esc(g.id) +
           '" value="' +
-          esc(g.title || "シーン別の参考写真") +
-          '" aria-label="シーンセット名"><button class="scene-toggle" type="button" aria-expanded="true" title="折りたたむ">⌄</button><button class="iconbtn delete-scene-group" type="button" title="セットを削除">×</button></div><div class="scene-group-body">' +
+          esc(g.title || "カット" + (gi + 1)) +
+          '" aria-label="カット名" placeholder="カット名（例：カット1 寄り）"><button class="scene-toggle" type="button" aria-expanded="true" title="折りたたむ">⌄</button><button class="iconbtn delete-scene-group" type="button" title="カットを削除">×</button></div><div class="scene-group-body">' +
+          cutBaseMarkup(g) +
           state.sections
             .filter(
               (sec) => (sec.sceneGroupId || state.sceneGroups[0]?.id) === g.id,
@@ -859,7 +877,7 @@ function renderSections() {
           '">＋ カテゴリを追加</button></div></div>',
       )
       .join("") +
-    '<button class="add-scene-group" id="addSceneGroup" type="button">＋ シーン別の参考写真セットを追加</button>';
+    '<button class="add-scene-group" id="addSceneGroup" type="button">＋ カットを追加</button>';
   root.querySelectorAll(".scene-group-title").forEach((el) =>
     el.addEventListener("input", () => {
       const g = state.sceneGroups.find((x) => x.id === el.dataset.groupTitle);
@@ -884,9 +902,12 @@ function renderSections() {
       (el.onclick = () => {
         const gid = el.closest(".scene-group").dataset.groupId;
         if (state.sceneGroups.length <= 1) {
-          toast("最後のセットは削除できません");
+          toast("最後のカットは削除できません");
           return;
         }
+        const g = state.sceneGroups.find((x) => x.id === gid);
+        if (!confirm("「" + (g?.title || "このカット") + "」を削除しますか？"))
+          return;
         state.sceneGroups = state.sceneGroups.filter((g) => g.id !== gid);
         state.sections = state.sections.filter(
           (sec) => sec.sceneGroupId !== gid,
@@ -914,10 +935,12 @@ function renderSections() {
   );
   document.getElementById("addSceneGroup").onclick = () => {
     const gid = id();
-    state.sceneGroups.push({ id: gid, title: "新しいシーンセット" });
-    defaults
-      .filter((d) => d.title !== "天板")
-      .forEach((d) =>
+    state.sceneGroups.push({
+      id: gid,
+      title: "カット" + (state.sceneGroups.length + 1),
+      base: null,
+    });
+    defaults.forEach((d) =>
         state.sections.push({
           ...d,
           id: id(),
@@ -957,11 +980,8 @@ function renderSections() {
           }[section.title] || "";
       section[el.dataset.key] = el.value;
       persist();
-      root.querySelectorAll(".section-editor").forEach((node, i) => {
-        const s = state.sections[i],
-          links = node.querySelector(".searches");
-        if (links) links.innerHTML = searchLinks(s);
-      });
+      const links = el.closest(".section-editor").querySelector(".searches");
+      if (links) links.innerHTML = searchLinks(section);
       renderPreview();
     }),
   );
@@ -1147,6 +1167,23 @@ function renderSections() {
       renderPreview();
     }),
   );
+  root.querySelectorAll(".cut-base-input").forEach(
+    (el) =>
+      (el.onchange = () => {
+        if (el.files[0]) setBase(el.dataset.baseGroup, el.files[0]);
+      }),
+  );
+  root.querySelectorAll(".cut-base-remove").forEach(
+    (el) =>
+      (el.onclick = () => {
+        const g = state.sceneGroups.find((x) => x.id === el.dataset.baseGroup);
+        if (!g) return;
+        g.base = null;
+        persist();
+        renderSections();
+        renderPreview();
+      }),
+  );
   root
     .querySelectorAll(".file-add input")
     .forEach(
@@ -1228,9 +1265,9 @@ function renderSections() {
       e.preventDefault();
       box.classList.remove("drag");
       const files = [...e.dataTransfer.files];
-      if (box.id === "baseDrop") {
+      if (box.dataset.baseGroup) {
         const f = files.find((x) => x.type.startsWith("image/"));
-        if (f) setBase(f);
+        if (f) setBase(box.dataset.baseGroup, f);
       } else {
         const id = box.closest(".section-editor")?.dataset.id;
         if (id) addImages(id, files);
@@ -1360,12 +1397,25 @@ function migrateSections() {
   state.sectionPresetVersion = 2;
   return true;
 }
+// シーンセット（sceneGroups）＝撮影カット。旧データの共通ベース写真（state.base）は1カット目へ移す。
 function ensureSceneGroups() {
   let changed = false;
   if (!Array.isArray(state.sceneGroups) || !state.sceneGroups.length) {
-    state.sceneGroups = [{ id: "scene1", title: "シーン別の参考写真" }];
+    state.sceneGroups = [{ id: "scene1", title: "カット1", base: null }];
     changed = true;
   }
+  if ("base" in state) {
+    if (state.base && !state.sceneGroups[0].base)
+      state.sceneGroups[0].base = state.base;
+    delete state.base;
+    changed = true;
+  }
+  state.sceneGroups.forEach((g, i) => {
+    if (!g.title || g.title === "シーン別の参考写真") {
+      g.title = "カット" + (i + 1);
+      changed = true;
+    }
+  });
   const first = state.sceneGroups[0].id;
   for (const sec of state.sections || [])
     if (!sec.sceneGroupId) {
@@ -1505,22 +1555,22 @@ function renderPreview() {
   );
   const root = document.getElementById("preview"),
     pages = [];
+  const groups = state.sceneGroups || [
+    { id: "scene1", title: "カット1", base: null },
+  ];
   const hasAny =
-    state.base ||
+    groups.some((g) => g.base) ||
     state.projectName ||
     state.dishName ||
     state.sections.some((s) => (s.images || []).length);
   if (!hasAny) {
     root.innerHTML =
-      '<div class="empty-state"><div><strong>資料のプレビューがここに表示されます</strong><p>案件名を入力し、ベース写真やシーン別の写真を追加してください。<br>写真を入れるとページが自動で組み上がります。</p></div></div>';
+      '<div class="empty-state"><div><strong>資料のプレビューがここに表示されます</strong><p>案件名を入力し、カットごとにベース写真や参考写真を追加してください。<br>写真を入れるとページが自動で組み上がります。</p></div></div>';
     document.getElementById("pageCount").textContent =
       "入力すると自動更新されます";
     return;
   }
-  const groups = state.sceneGroups || [
-      { id: "scene1", title: "シーン別の参考写真" },
-    ],
-    kindOf = (sec) =>
+  const kindOf = (sec) =>
       ({
         天板: "tabletop",
         全体の雰囲気: "ambience",
@@ -1532,34 +1582,7 @@ function renderPreview() {
       sec.categoryKey ||
       "";
   pages.push({ type: "cover" });
-  const firstSections = state.sections.filter(
-      (sec) => (sec.sceneGroupId || groups[0]?.id) === groups[0]?.id,
-    ),
-    tabletop = firstSections.find((sec) => kindOf(sec) === "tabletop");
-  const tableChunks = tabletop ? pagesForSection(tabletop) : [];
-  pages.push({
-    type: "base",
-    table: tabletop
-      ? { s: tabletop, imgs: tableChunks[0]?.imgs || [], start: 0 }
-      : null,
-  });
-  if (tabletop && tableChunks.length > 1)
-    tableChunks.slice(1).forEach((chunk) =>
-      pages.push({
-        type: "packed",
-        groupLabel: "",
-        blocks: [
-          {
-            s: chunk.s,
-            imgs: chunk.imgs,
-            start: chunk.start,
-            continued: true,
-            weight: 9,
-          },
-        ],
-      }),
-    );
-  function packSections(sections, label) {
+  function packSections(sections, tabletop, cut) {
     let blocks = [];
     for (const sec of sections) {
       if (sec === tabletop) continue;
@@ -1589,22 +1612,53 @@ function renderPreview() {
       weight = 0;
     for (const block of blocks) {
       if (batch.length && weight + block.weight > 9) {
-        pages.push({ type: "packed", groupLabel: label, blocks: batch });
+        pages.push({ type: "packed", cut, blocks: batch });
         batch = [];
         weight = 0;
       }
       batch.push(block);
       weight += block.weight;
     }
-    if (batch.length)
-      pages.push({ type: "packed", groupLabel: label, blocks: batch });
+    if (batch.length) pages.push({ type: "packed", cut, blocks: batch });
   }
-  groups.forEach((g, gi) => {
+  groups.forEach((g) => {
     const sections = state.sections.filter(
-      (sec) => (sec.sceneGroupId || groups[0].id) === g.id,
+        (sec) => (sec.sceneGroupId || groups[0].id) === g.id,
+      ),
+      tabletop = sections.find((sec) => kindOf(sec) === "tabletop"),
+      tableChunks = tabletop ? pagesForSection(tabletop) : [];
+    pages.push({
+      type: "base",
+      cut: g,
+      table: tabletop
+        ? { s: tabletop, imgs: tableChunks[0]?.imgs || [], start: 0 }
+        : null,
+    });
+    tableChunks.slice(1).forEach((chunk) =>
+      pages.push({
+        type: "packed",
+        cut: g,
+        blocks: [
+          {
+            s: chunk.s,
+            imgs: chunk.imgs,
+            start: chunk.start,
+            continued: true,
+            weight: 9,
+          },
+        ],
+      }),
     );
-    packSections(sections, gi === 0 ? "" : g.title || "シーン別の参考写真");
+    packSections(sections, tabletop, g);
   });
+  const sheetHead = (cut) =>
+    '<div class="sheet-head">' +
+    esc(
+      [state.dishName || state.projectName || "美術資料", cut?.title]
+        .filter(Boolean)
+        .join(" ｜ "),
+    ) +
+    "</div>";
   root.innerHTML = pages
     .map((p, i) => {
       let content = "";
@@ -1636,13 +1690,12 @@ function renderPreview() {
           "</div></div>";
       } else if (p.type === "base") {
         content =
-          '<div class="sheet-head">' +
-          esc(state.dishName || state.projectName || "美術資料") +
-          '</div><div class="base-page-body"><div class="kicker">【' +
+          sheetHead(p.cut) +
+          '<div class="base-page-body"><div class="kicker">【' +
           esc(state.baseImageTitle || "ベースイメージ") +
           "】</div>" +
-          (state.base
-            ? '<img class="base-photo" src="' + esc(state.base) + '">'
+          (p.cut.base
+            ? '<img class="base-photo" src="' + esc(p.cut.base) + '">'
             : '<div class="empty-hero">ベース写真を追加してください</div>') +
           (p.table
             ? '<div class="base-table-title">【' +
@@ -1653,13 +1706,8 @@ function renderPreview() {
           "</div>";
       } else {
         content =
-          '<div class="sheet-head">' +
-          esc(state.dishName || state.projectName || "美術資料") +
-          '</div><div class="sheet-content">' +
-          (p.groupLabel
-            ? '<div class="kicker">' + esc(p.groupLabel) + "</div>"
-            : "") +
-          '<div class="packed-sections">' +
+          sheetHead(p.cut) +
+          '<div class="sheet-content"><div class="packed-sections">' +
           p.blocks
             .map(
               (block) =>
@@ -1695,11 +1743,12 @@ function renderPreview() {
   document.getElementById("pageCount").textContent = pages.length + "ページ";
   requestAnimationFrame(refreshMosaics);
 }
-async function setBase(file) {
-  state.base = await fileData(file);
-  document.getElementById("baseImage").src = state.base;
-  document.getElementById("basePreview").style.display = "block";
+async function setBase(groupId, file) {
+  const g = state.sceneGroups.find((x) => x.id === groupId);
+  if (!g) return;
+  g.base = await fileData(file);
   persist();
+  renderSections();
   renderPreview();
 }
 function renderDocs() {
@@ -1774,8 +1823,6 @@ async function restoreUI() {
   document.getElementById("headingFontSizeValue").textContent =
     state.headingFontSize + " pt";
   document.getElementById("baseHeading").value = state.baseImageTitle;
-  document.getElementById("basePanelHeading").textContent =
-    state.baseImageTitle;
   document.documentElement.style.setProperty(
     "--accent",
     state.accent || "#507b58",
@@ -1785,15 +1832,6 @@ async function restoreUI() {
     .forEach((b) =>
       b.classList.toggle("active", b.dataset.color === state.accent),
     );
-  const basePreview = document.getElementById("basePreview"),
-    baseImage = document.getElementById("baseImage");
-  if (state.base) {
-    baseImage.src = state.base;
-    basePreview.style.display = "block";
-  } else {
-    baseImage.removeAttribute("src");
-    basePreview.style.display = "none";
-  }
   const lp = document.getElementById("brandLogoPreview"),
     removeLogo = document.getElementById("removeBrandLogo");
   if (
@@ -1943,24 +1981,15 @@ document
     el.addEventListener("input", () => setField(el.id, el.value)),
   );
 document.getElementById("baseHeading").oninput = (e) => {
-  document.getElementById("basePanelHeading").textContent =
-    e.target.value || "ベース写真";
   setField("baseImageTitle", e.target.value);
+  document
+    .querySelectorAll(".cut-base-label")
+    .forEach((el) => (el.textContent = e.target.value || "ベースイメージ"));
 };
 document.getElementById("headingFontSize").oninput = (e) => {
   state.headingFontSize = Number(e.target.value);
   document.getElementById("headingFontSizeValue").textContent =
     state.headingFontSize + " pt";
-  persist();
-  renderPreview();
-};
-document.getElementById("baseInput").onchange = (e) => {
-  if (e.target.files[0]) setBase(e.target.files[0]);
-};
-document.getElementById("removeBase").onclick = () => {
-  state.base = null;
-  document.getElementById("basePreview").style.display = "none";
-  document.getElementById("baseInput").value = "";
   persist();
   renderPreview();
 };

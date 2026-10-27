@@ -277,6 +277,15 @@ button {
 .scene-group .section-editor {
   margin: 0 0 8px;
 }
+.cut-base {
+  margin: 0 0 10px;
+}
+.cut-base-label {
+  font-size: 10px;
+  font-weight: 750;
+  color: #536a58;
+  margin: 2px 0 6px;
+}
 .scene-group-add,
 .add-scene-group {
   width: 100%;
