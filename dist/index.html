@@ -226,6 +226,15 @@ button {
   flex-direction: column;
   gap: 13px;
 }
+/* 入力欄とプレビューを別々にスクロールできるよう、それぞれ画面の高さに収める */
+.editor,
+.preview-wrap {
+  position: sticky;
+  top: var(--column-top, 88px);
+  max-height: calc(100vh - var(--column-top, 88px) - 16px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
 .panel {
   background: #fff;
   border: 1px solid var(--line);
@@ -692,8 +701,7 @@ button {
   color: #456d4e;
 }
 .preview-wrap {
-  position: sticky;
-  top: 88px;
+  padding-right: 4px;
 }
 .preview-head {
   display: flex;
@@ -1158,8 +1166,8 @@ button {
   .sheet {
     padding: 5.5% 6%;
   }
-  .preview-wrap {
-    top: 80px;
+  .layout {
+    --column-top: 80px;
   }
 }
 @media (max-width: 760px) {
@@ -1171,9 +1179,14 @@ button {
   }
   .preview-wrap {
     position: static;
+    max-height: none;
+    overflow: visible;
     grid-row: 1;
   }
   .editor {
+    position: static;
+    max-height: none;
+    overflow: visible;
     grid-row: 2;
   }
   .page {
@@ -1239,6 +1252,8 @@ button {
   }
   .preview-wrap {
     position: static;
+    max-height: none;
+    overflow: visible;
   }
   .sheet {
     width: 210mm;
@@ -2219,6 +2234,13 @@ async function findSavedProject(projectId) {
     req.onerror = () => resolve(null);
   });
 }
+// 入力欄とプレビューはそれぞれスクロールするので、両方とも先頭に戻す
+function scrollToTop() {
+  window.scrollTo({ top: 0, behavior: "smooth" });
+  document
+    .querySelectorAll(".editor, .preview-wrap")
+    .forEach((el) => el.scrollTo({ top: 0, behavior: "smooth" }));
+}
 async function openSavedProject(projectId) {
   const record = await findSavedProject(projectId);
   if (!record) return;
@@ -2227,7 +2249,7 @@ async function openSavedProject(projectId) {
   await saveStateNow();
   restoreUI();
   renderLibrary();
-  window.scrollTo({ top: 0, behavior: "smooth" });
+  scrollToTop();
   toast("保存した資料を開きました");
 }
 async function copySavedProject(projectId) {
@@ -2240,7 +2262,7 @@ async function copySavedProject(projectId) {
   await saveStateNow();
   restoreUI();
   renderLibrary();
-  window.scrollTo({ top: 0, behavior: "smooth" });
+  scrollToTop();
   toast("複製を作成しました。案件名を変更して編集できます");
 }
 async function deleteSavedProject(projectId) {
@@ -4120,7 +4142,7 @@ document.getElementById("resetBtn").onclick = async () => {
   await saveStateNow();
   restoreUI();
   renderLibrary();
-  window.scrollTo({ top: 0, behavior: "smooth" });
+  scrollToTop();
   toast("新しい案件を作成しました。前の資料はストックに保存されています");
 };
 document

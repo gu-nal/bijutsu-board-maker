@@ -167,6 +167,13 @@ async function findSavedProject(projectId) {
     req.onerror = () => resolve(null);
   });
 }
+// 入力欄とプレビューはそれぞれスクロールするので、両方とも先頭に戻す
+function scrollToTop() {
+  window.scrollTo({ top: 0, behavior: "smooth" });
+  document
+    .querySelectorAll(".editor, .preview-wrap")
+    .forEach((el) => el.scrollTo({ top: 0, behavior: "smooth" }));
+}
 async function openSavedProject(projectId) {
   const record = await findSavedProject(projectId);
   if (!record) return;
@@ -175,7 +182,7 @@ async function openSavedProject(projectId) {
   await saveStateNow();
   restoreUI();
   renderLibrary();
-  window.scrollTo({ top: 0, behavior: "smooth" });
+  scrollToTop();
   toast("保存した資料を開きました");
 }
 async function copySavedProject(projectId) {
@@ -188,7 +195,7 @@ async function copySavedProject(projectId) {
   await saveStateNow();
   restoreUI();
   renderLibrary();
-  window.scrollTo({ top: 0, behavior: "smooth" });
+  scrollToTop();
   toast("複製を作成しました。案件名を変更して編集できます");
 }
 async function deleteSavedProject(projectId) {
@@ -2068,7 +2075,7 @@ document.getElementById("resetBtn").onclick = async () => {
   await saveStateNow();
   restoreUI();
   renderLibrary();
-  window.scrollTo({ top: 0, behavior: "smooth" });
+  scrollToTop();
   toast("新しい案件を作成しました。前の資料はストックに保存されています");
 };
 document
