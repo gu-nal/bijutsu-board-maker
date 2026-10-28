@@ -1923,3 +1923,17 @@ button {
   border-color: var(--accent, #507b58);
   background: #eef5ee;
 }
+
+/* ベース写真のページ：写真の下に天板・お皿などのカテゴリを詰めて置く */
+.base-page-body .packed-sections {
+  flex: 1;
+  min-height: 0;
+  margin-top: 1.5%;
+}
+.base-page-body .empty-hero {
+  flex: none;
+  height: 30%;
+}
+.base-probe {
+  height: 0;
+}

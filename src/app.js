@@ -864,7 +864,7 @@ function sectionMarkup(s, idx) {
     candidateMarkup(s) +
     '</div>' +
     imageListMarkup(s) +
-    '</div><div class="url-row"><input class="input image-url" placeholder="画像・動画のURL（YouTube等も可）"><button class="btn small add-url">URL追加</button><label class="btn small file-add">写真・動画を選ぶ<input type="file" accept="image/*,video/*" multiple></label></div><button type="button" class="paste-images" aria-label="コピーした画像を貼り付け">検索先で画像をコピーしたら、ここをクリックして ⌘V<br>候補として追加し、不要なものは × で外せます</button></div></div>'
+    '<div class="url-row"><input class="input image-url" placeholder="画像・動画のURL（YouTube等も可）"><button class="btn small add-url">URL追加</button><label class="btn small file-add">写真・動画を選ぶ<input type="file" accept="image/*,video/*" multiple></label></div><button type="button" class="paste-images" aria-label="コピーした画像を貼り付け">検索先で画像をコピーしたら、ここをクリックして ⌘V<br>候補として追加し、不要なものは × で外せます</button></div></div>'
   );
 }
 function cutBaseMarkup(g) {
@@ -1420,48 +1420,6 @@ function renderSections() {
     };
   });
 }
-function pagesForSection(s) {
-  const all = s.images || [];
-  if (!all.length) return [];
-  // 段を手動で指定しているときは、段の途中でページが切れないよう段ごとにまとめて送る
-  if (s.layoutMode === "manual") {
-    // 段が未指定の写真は、プレビューと同じく最後の段に入れる
-    const lastRow = Math.max(1, ...all.map((im) => Number(im.layoutRow) || 1)),
-      rowOf = (im) => Number(im.layoutRow) || lastRow,
-      rowIds = [...new Set(all.map(rowOf))].sort((x, y) => x - y),
-      chunks = [];
-    let imgs = [],
-      offset = 0;
-    const flush = () => {
-      chunks.push({ s, imgs, start: offset, continued: chunks.length > 0 });
-      offset += imgs.length;
-      imgs = [];
-    };
-    for (const rowId of rowIds) {
-      const row = all.filter((im) => rowOf(im) === rowId);
-      if (imgs.length && imgs.length + row.length > 9) flush();
-      imgs = imgs.concat(row);
-    }
-    if (imgs.length) flush();
-    return chunks;
-  }
-  const pageCount = Math.ceil(all.length / 9),
-    base = Math.floor(all.length / pageCount),
-    extra = all.length % pageCount,
-    chunks = [];
-  let offset = 0;
-  for (let i = 0; i < pageCount; i++) {
-    const size = base + (i < extra ? 1 : 0);
-    chunks.push({
-      s,
-      imgs: all.slice(offset, offset + size),
-      start: offset,
-      continued: i > 0,
-    });
-    offset += size;
-  }
-  return chunks;
-}
 function caption(im) {
   return (
     "<figcaption>" +
@@ -1674,6 +1632,14 @@ function measurePackedPage(root) {
       kicker: a.offsetHeight + 2,
       gap: b.offsetTop - a.offsetTop - a.offsetHeight,
     };
+  // ベース写真のページ：見出しの下からページ下端までの高さと幅
+  probe.innerHTML =
+    '<div class="sheet-head">見本</div><div class="base-page-body"><div class="kicker">【見本】</div><div class="base-probe"></div></div>';
+  const body = probe.querySelector(".base-page-body"),
+    mark = probe.querySelector(".base-probe");
+  metrics.baseWidth = body.clientWidth;
+  metrics.baseBody = body.clientHeight;
+  metrics.baseFree = body.clientHeight - (mark.offsetTop - body.offsetTop);
   probe.remove();
   return metrics;
 }
@@ -1840,7 +1806,20 @@ function renderPreview() {
   // 入りきらないときは、そのページの写真をまとめて少し縮めて収める（MIN_SCALE まで）。
   // 1カテゴリだけでもそれ以上縮むときだけ、段の切れ目で次のページへ送る。
   const MIN_SCALE = 0.6;
-  function packSections(sections, tabletop, cut) {
+  // ベース写真の下の空き（＝1ページ目にカテゴリを詰められる高さ）
+  function baseCapacity(cut) {
+    const r = cut.base ? imageRatios["base:" + cut.id] : 0,
+      photo = cut.base
+        ? Math.min(
+            page.baseWidth / clampRatio(r || 1.5),
+            page.baseWidth * 0.75,
+            page.baseBody * 0.62,
+          )
+        : page.baseBody * 0.3;
+    return Math.max(0, page.baseFree - photo - page.gap);
+  }
+  // カットごとに、ベース写真の下から天板→その他のカテゴリの順に詰めていく
+  function packCut(sections, tabletop, cut) {
     // fixed＝見出し・キャプション・すき間（縮まない部分）、flex＝写真の高さ（縮められる部分）
     const rowFlex = (row) =>
         naturalRowHeight(
@@ -1858,15 +1837,17 @@ function renderPreview() {
           (rows.length ? MOSAIC_CAPTION * rows.length + MOSAIC_GAP * (rows.length - 1) : 60),
         flex: rows.reduce((sum, row) => sum + rowFlex(row), 0),
       }),
-      scaleFor = (list) => {
+      scaleFor = (list, cap = page.height) => {
         const fixed =
             list.reduce((x, bl) => x + bl.fixed, 0) + page.gap * (list.length - 1),
           flex = list.reduce((x, bl) => x + bl.flex, 0);
-        return flex ? Math.min(1, (page.height - fixed) / flex) : fixed <= page.height ? 1 : 0;
+        return flex ? Math.min(1, (cap - fixed) / flex) : fixed <= cap ? 1 : 0;
       },
-      blocks = [];
-    for (const sec of sections) {
-      if (sec === tabletop) continue;
+      blocks = [],
+      ordered = tabletop
+        ? [tabletop, ...sections.filter((sec) => sec !== tabletop)]
+        : sections;
+    for (const sec of ordered) {
       const images = sec.images || [];
       if (!images.length) {
         blocks.push(blockOf(sec, [], 0, false));
@@ -1893,49 +1874,37 @@ function renderPreview() {
       });
       if (chunk.length) blocks.push(blockOf(sec, chunk, start, start > 0));
     }
-    let batch = [];
-    const flush = () => {
-      const scale = Math.max(0, scaleFor(batch));
-      batch.forEach((bl) => (bl.height = bl.fixed + bl.flex * scale));
-      pages.push({ type: "packed", cut, blocks: batch, heightBase: page.height });
+    const basePage = { type: "base", cut, blocks: [], heightBase: baseCapacity(cut) };
+    pages.push(basePage);
+    let current = basePage,
       batch = [];
+    const flush = () => {
+      const scale = Math.max(0, scaleFor(batch, current.heightBase));
+      batch.forEach((bl) => (bl.height = bl.fixed + bl.flex * scale));
+      current.blocks = batch;
+      batch = [];
+      current = { type: "packed", cut, blocks: [], heightBase: page.height };
+      pages.push(current);
     };
     for (const block of blocks) {
-      if (batch.length && scaleFor([...batch, block]) < MIN_SCALE) flush();
+      // ベース写真のページは、空きが少なければ何も入れずに次のページから始める
+      if (scaleFor([...batch, block], current.heightBase) < MIN_SCALE)
+        if (batch.length || current === basePage) flush();
       batch.push(block);
     }
     if (batch.length) flush();
+    if (!current.blocks.length) pages.pop();
   }
-  loadImageRatios(state.sections.flatMap((sec) => sec.images || []));
+  loadImageRatios([
+    ...state.sections.flatMap((sec) => sec.images || []),
+    ...groups.filter((g) => g.base).map((g) => ({ id: "base:" + g.id, src: g.base })),
+  ]);
   groups.forEach((g) => {
     const sections = state.sections.filter(
         (sec) => (sec.sceneGroupId || groups[0].id) === g.id,
       ),
-      tabletop = sections.find((sec) => kindOf(sec) === "tabletop"),
-      tableChunks = tabletop ? pagesForSection(tabletop) : [];
-    pages.push({
-      type: "base",
-      cut: g,
-      table: tabletop
-        ? { s: tabletop, imgs: tableChunks[0]?.imgs || [], start: 0 }
-        : null,
-    });
-    tableChunks.slice(1).forEach((chunk) =>
-      pages.push({
-        type: "packed",
-        cut: g,
-        blocks: [
-          {
-            s: chunk.s,
-            imgs: chunk.imgs,
-            start: chunk.start,
-            continued: true,
-            fill: true,
-          },
-        ],
-      }),
-    );
-    packSections(sections, tabletop, g);
+      tabletop = sections.find((sec) => kindOf(sec) === "tabletop");
+    packCut(sections, tabletop, g);
   });
   const sheetHead = (cut) =>
     '<div class="sheet-head">' +
@@ -1944,6 +1913,26 @@ function renderPreview() {
         .filter(Boolean)
         .join(" ｜ "),
     ) +
+    "</div>";
+  const packedBlocks = (p) =>
+    '<div class="packed-sections">' +
+    p.blocks
+      .map(
+        (block) =>
+          '<section class="packed-category" style="flex:' +
+          (!p.heightBase
+            ? "1 1 0"
+            : "0 1 " + ((block.height / p.heightBase) * 100).toFixed(2) + "%") +
+          '"><div class="kicker">【' +
+          esc(block.s.title) +
+          (block.continued ? "・続き" : "") +
+          "】</div>" +
+          (block.imgs.length
+            ? imageGrid(block.imgs, block.start + 1, block.s.id)
+            : '<div class="category-empty">参考写真を追加できます</div>') +
+          "</section>",
+      )
+      .join("") +
     "</div>";
   root.innerHTML = pages
     .map((p, i) => {
@@ -1983,35 +1972,14 @@ function renderPreview() {
           (p.cut.base
             ? '<img class="base-photo" src="' + esc(p.cut.base) + '">'
             : '<div class="empty-hero">ベース写真を追加してください</div>') +
-          (p.table
-            ? '<div class="base-table-title">【' +
-              esc(p.table.s.title) +
-              "】</div>" +
-              imageGrid(p.table.imgs, 1, p.table.s.id)
-            : "") +
+          packedBlocks(p) +
           "</div>";
       } else {
         content =
           sheetHead(p.cut) +
-          '<div class="sheet-content"><div class="packed-sections">' +
-          p.blocks
-            .map(
-              (block) =>
-                '<section class="packed-category" style="flex:' +
-                (block.fill || !p.heightBase
-                  ? "1 1 0"
-                  : "0 1 " + ((block.height / p.heightBase) * 100).toFixed(2) + "%") +
-                '"><div class="kicker">【' +
-                esc(block.s.title) +
-                (block.continued ? "・続き" : "") +
-                "】</div>" +
-                (block.imgs.length
-                  ? imageGrid(block.imgs, block.start + 1, block.s.id)
-                  : '<div class="category-empty">参考写真を追加できます</div>') +
-                "</section>",
-            )
-            .join("") +
-          "</div></div>";
+          '<div class="sheet-content">' +
+          packedBlocks(p) +
+          "</div>";
       }
       return (
         '<article class="sheet" style="--accent:' +
