@@ -1299,6 +1299,28 @@ function renderSections() {
 function pagesForSection(s) {
   const all = s.images || [];
   if (!all.length) return [];
+  // 段を手動で指定しているときは、段の途中でページが切れないよう段ごとにまとめて送る
+  if (s.layoutMode === "manual") {
+    // 段が未指定の写真は、プレビューと同じく最後の段に入れる
+    const lastRow = Math.max(1, ...all.map((im) => Number(im.layoutRow) || 1)),
+      rowOf = (im) => Number(im.layoutRow) || lastRow,
+      rowIds = [...new Set(all.map(rowOf))].sort((x, y) => x - y),
+      chunks = [];
+    let imgs = [],
+      offset = 0;
+    const flush = () => {
+      chunks.push({ s, imgs, start: offset, continued: chunks.length > 0 });
+      offset += imgs.length;
+      imgs = [];
+    };
+    for (const rowId of rowIds) {
+      const row = all.filter((im) => rowOf(im) === rowId);
+      if (imgs.length && imgs.length + row.length > 9) flush();
+      imgs = imgs.concat(row);
+    }
+    if (imgs.length) flush();
+    return chunks;
+  }
   const pageCount = Math.ceil(all.length / 9),
     base = Math.floor(all.length / pageCount),
     extra = all.length % pageCount,
