@@ -1886,3 +1886,40 @@ button {
 .image-item.drop-after {
   box-shadow: 0 3px 0 var(--accent, #507b58);
 }
+
+/* 写真リストの段の枠 */
+.image-list-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+  font-size: 10px;
+  color: var(--muted, #6b746d);
+}
+.image-row-box {
+  display: grid;
+  gap: 6px;
+  margin-bottom: 8px;
+  padding: 6px;
+  border: 1px dashed #cfd8cf;
+  border-radius: 9px;
+  background: #fafcfa;
+}
+.row-box-label {
+  font-size: 10px;
+  font-weight: 700;
+  color: #6b746d;
+}
+.image-row-box.is-new {
+  min-height: 44px;
+  place-items: center;
+  background: transparent;
+}
+.image-row-box.is-new .row-box-label {
+  font-weight: 500;
+}
+.image-row-box.drop-into {
+  border-color: var(--accent, #507b58);
+  background: #eef5ee;
+}

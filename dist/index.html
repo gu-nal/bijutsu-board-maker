@@ -1897,6 +1897,43 @@ button {
 .image-item.drop-after {
   box-shadow: 0 3px 0 var(--accent, #507b58);
 }
+
+/* 写真リストの段の枠 */
+.image-list-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+  font-size: 10px;
+  color: var(--muted, #6b746d);
+}
+.image-row-box {
+  display: grid;
+  gap: 6px;
+  margin-bottom: 8px;
+  padding: 6px;
+  border: 1px dashed #cfd8cf;
+  border-radius: 9px;
+  background: #fafcfa;
+}
+.row-box-label {
+  font-size: 10px;
+  font-weight: 700;
+  color: #6b746d;
+}
+.image-row-box.is-new {
+  min-height: 44px;
+  place-items: center;
+  background: transparent;
+}
+.image-row-box.is-new .row-box-label {
+  font-weight: 500;
+}
+.image-row-box.drop-into {
+  border-color: var(--accent, #507b58);
+  background: #eef5ee;
+}
 </style>
   </head>
   <body>
@@ -2889,6 +2926,64 @@ function imageRowSelect(section, image) {
     "</select></label>"
   );
 }
+// 写真リストは段ごとの枠に分けて表示する。枠へドラッグすると、その段に入る。
+function imageItemMarkup(im, number) {
+  return (
+    '<div class="image-item" data-image="' +
+    esc(im.id) +
+    '"><div class="image-thumb' +
+    (im.kind === "video" ? " is-video" : "") +
+    '" title="ドラッグして並べ替え"><span class="image-number">' +
+    String(number).padStart(2, "0") +
+    '</span><img src="' +
+    esc(im.src) +
+    '" alt="" draggable="false">' +
+    (im.kind === "video"
+      ? '<button type="button" class="video-play" title="動画を再生">▶</button>'
+      : "") +
+    '</div><div class="image-meta"><input data-image-key="title" value="' +
+    esc(
+      ["コピーした参考画像", "コピーした画像"].includes(im.title)
+        ? ""
+        : im.title || "",
+    ) +
+    '" placeholder="写真の説明"><input data-image-key="source" value="' +
+    esc(im.source === "クリップボードから追加" ? "" : im.source || "") +
+    '" placeholder="出典・作者・ライセンス">' +
+    '</div><div class="image-controls"><button class="iconbtn delete-image" title="写真を削除">×</button></div></div>'
+  );
+}
+function imageListMarkup(s) {
+  const rows = imageRows(s, s.images || []);
+  if (!rows.length) return '<div class="image-list"></div>';
+  const rowIds =
+    s.layoutMode === "manual"
+      ? rows.map((row) => Number(row[0].layoutRow) || 1)
+      : rows.map((_, i) => i + 1);
+  let number = 0;
+  return (
+    '<div class="image-list"><div class="image-list-head"><span>写真をドラッグして段の枠に入れると、その段に並びます</span>' +
+    (s.layoutMode === "manual"
+      ? '<button type="button" class="btn small reset-rows">段を自動に戻す</button>'
+      : "") +
+    "</div>" +
+    rows
+      .map(
+        (row, ri) =>
+          '<div class="image-row-box" data-row="' +
+          rowIds[ri] +
+          '"><div class="row-box-label">' +
+          (ri + 1) +
+          "段目</div>" +
+          row.map((im) => imageItemMarkup(im, ++number)).join("") +
+          "</div>",
+      )
+      .join("") +
+    '<div class="image-row-box is-new" data-row="new"><div class="row-box-label">＋ ここに入れると新しい段（' +
+    (rows.length + 1) +
+    "段目）</div></div></div>"
+  );
+}
 function sectionMarkup(s, idx) {
   return (
     '<div class="section-editor' +
@@ -2909,36 +3004,8 @@ function sectionMarkup(s, idx) {
     searchLinks(s) +
     '</div><button class="btn small soft candidate-search">無料画像の参考候補を表示</button><div class="candidate-browser">' +
     candidateMarkup(s) +
-    '</div><div class="image-list">' +
-    imageRows(s, s.images || [])
-      .flat()
-      .map(
-        (im, imageIndex) =>
-          '<div class="image-item" data-image="' +
-          esc(im.id) +
-          '"><div class="image-thumb' +
-          (im.kind === "video" ? " is-video" : "") +
-          '" title="ドラッグして並べ替え"><span class="image-number">' +
-          String(imageIndex + 1).padStart(2, "0") +
-          '</span><img src="' +
-          esc(im.src) +
-          '" alt="" draggable="false">' +
-          (im.kind === "video"
-            ? '<button type="button" class="video-play" title="動画を再生">▶</button>'
-            : "") +
-          '</div><div class="image-meta"><input data-image-key="title" value="' +
-          esc(
-            ["コピーした参考画像", "コピーした画像"].includes(im.title)
-              ? ""
-              : im.title || "",
-          ) +
-          '" placeholder="写真の説明"><input data-image-key="source" value="' +
-          esc(im.source === "クリップボードから追加" ? "" : im.source || "") +
-          '" placeholder="出典・作者・ライセンス">' +
-          imageRowSelect(s, im) +
-          '</div><div class="image-controls"><button class="iconbtn delete-image" title="写真を削除">×</button></div></div>',
-      )
-      .join("") +
+    '</div>' +
+    imageListMarkup(s) +
     '</div><div class="url-row"><input class="input image-url" placeholder="画像・動画のURL（YouTube等も可）"><button class="btn small add-url">URL追加</button><label class="btn small file-add">写真・動画を選ぶ<input type="file" accept="image/*,video/*" multiple></label></div><button type="button" class="paste-images" aria-label="コピーした画像を貼り付け">検索先で画像をコピーしたら、ここをクリックして ⌘V<br>候補として追加し、不要なものは × で外せます</button></div></div>'
   );
 }
@@ -3210,9 +3277,53 @@ function renderSections() {
         renderPreview();
       }),
   );
-  // 写真はつまみ（番号付きのサムネイル）をドラッグして並べ替える。
-  // 段を手動指定しているときは、落とした先の写真と同じ段に入る。
+  // 写真はサムネイル（番号付き）をつかんでドラッグする。
+  // 写真の上に落とすとその前後へ、段の枠の空いた所に落とすとその段の最後へ入る。
   let draggingImage = null;
+  const clearDropMarks = () =>
+    root
+      .querySelectorAll(".drop-before,.drop-after,.drop-into")
+      .forEach((x) => x.classList.remove("drop-before", "drop-after", "drop-into"));
+  const sameList = (node) =>
+    draggingImage &&
+    draggingImage.closest(".image-list") === node.closest(".image-list");
+  function moveImage(listNode, rowValue, targetId, after) {
+    const section = state.sections.find(
+      (x) => x.id === listNode.closest(".section-editor").dataset.id,
+    );
+    if (!section || !draggingImage) return;
+    // まだ自動の段組みなら、今の見た目の段をそのまま手動指定に写してから動かす
+    if (section.layoutMode !== "manual") {
+      imageRows(section, section.images).forEach((row, i) =>
+        row.forEach((im) => (im.layoutRow = i + 1)),
+      );
+      section.layoutMode = "manual";
+    }
+    const order = imageRows(section, section.images).flat(),
+      moving = order.find((x) => x.id === draggingImage.dataset.image);
+    if (!moving) return;
+    order.splice(order.indexOf(moving), 1);
+    const maxRow = Math.max(0, ...order.map((im) => Number(im.layoutRow) || 1));
+    const row = rowValue === "new" ? maxRow + 1 : Number(rowValue) || 1,
+      target = targetId && order.find((x) => x.id === targetId);
+    let at;
+    if (target) at = order.indexOf(target) + (after ? 1 : 0);
+    else {
+      const lastInRow = order.filter((im) => (Number(im.layoutRow) || 1) === row).pop();
+      at = lastInRow ? order.indexOf(lastInRow) + 1 : order.length;
+    }
+    moving.layoutRow = row;
+    order.splice(at, 0, moving);
+    // 空いた段を詰めて 1, 2, 3… に振り直す
+    const ids = [...new Set(order.map((im) => Number(im.layoutRow) || 1))].sort(
+      (x, y) => x - y,
+    );
+    order.forEach((im) => (im.layoutRow = ids.indexOf(Number(im.layoutRow) || 1) + 1));
+    section.images = order;
+    persist();
+    renderSections();
+    renderPreview();
+  }
   root.querySelectorAll(".image-item").forEach((item) => {
     const handle = item.querySelector(".image-thumb");
     handle.addEventListener("pointerdown", () => (item.draggable = true));
@@ -3226,46 +3337,59 @@ function renderSections() {
       item.draggable = false;
       item.classList.remove("is-dragging");
       draggingImage = null;
-      root
-        .querySelectorAll(".drop-before,.drop-after")
-        .forEach((x) => x.classList.remove("drop-before", "drop-after"));
+      clearDropMarks();
     });
     item.addEventListener("dragover", (e) => {
-      if (
-        !draggingImage ||
-        draggingImage === item ||
-        draggingImage.parentElement !== item.parentElement
-      )
-        return;
+      if (!sameList(item) || draggingImage === item) return;
       e.preventDefault();
-      const r = item.getBoundingClientRect(),
-        after = e.clientY > r.top + r.height / 2;
-      item.classList.toggle("drop-after", after);
-      item.classList.toggle("drop-before", !after);
+      e.stopPropagation();
+      clearDropMarks();
+      const r = item.getBoundingClientRect();
+      item.classList.add(e.clientY > r.top + r.height / 2 ? "drop-after" : "drop-before");
     });
-    item.addEventListener("dragleave", () =>
-      item.classList.remove("drop-before", "drop-after"),
-    );
     item.addEventListener("drop", (e) => {
-      if (!draggingImage || draggingImage === item) return;
+      if (!sameList(item)) return;
       e.preventDefault();
-      const after = item.classList.contains("drop-after"),
-        section = state.sections.find(
-          (x) => x.id === item.closest(".section-editor").dataset.id,
-        ),
-        order = imageRows(section, section.images).flat(),
-        moving = order.find((x) => x.id === draggingImage.dataset.image),
-        target = order.find((x) => x.id === item.dataset.image);
-      if (!section || !moving || !target) return;
-      order.splice(order.indexOf(moving), 1);
-      order.splice(order.indexOf(target) + (after ? 1 : 0), 0, moving);
-      if (section.layoutMode === "manual") moving.layoutRow = target.layoutRow;
-      section.images = order;
-      persist();
-      renderSections();
-      renderPreview();
+      e.stopPropagation();
+      if (draggingImage === item) return;
+      moveImage(
+        item,
+        item.closest(".image-row-box").dataset.row,
+        item.dataset.image,
+        item.classList.contains("drop-after"),
+      );
     });
   });
+  root.querySelectorAll(".image-row-box").forEach((box) => {
+    box.addEventListener("dragover", (e) => {
+      if (!sameList(box)) return;
+      e.preventDefault();
+      clearDropMarks();
+      box.classList.add("drop-into");
+    });
+    box.addEventListener("dragleave", (e) => {
+      if (!box.contains(e.relatedTarget)) box.classList.remove("drop-into");
+    });
+    box.addEventListener("drop", (e) => {
+      if (!sameList(box)) return;
+      e.preventDefault();
+      moveImage(box, box.dataset.row, "", false);
+    });
+  });
+  root.querySelectorAll(".reset-rows").forEach(
+    (el) =>
+      (el.onclick = () => {
+        const section = state.sections.find(
+          (x) => x.id === el.closest(".section-editor").dataset.id,
+        );
+        if (!section) return;
+        section.layoutMode = "auto";
+        section.images.forEach((im) => delete im.layoutRow);
+        persist();
+        renderSections();
+        renderPreview();
+      }),
+  );
   root
     .querySelectorAll(".candidate-search")
     .forEach(
