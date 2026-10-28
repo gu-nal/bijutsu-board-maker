@@ -3542,6 +3542,92 @@ function ensureSceneGroups() {
     }
   return changed;
 }
+// ---- 参考写真の段組みとページ詰め ----
+// プレビュー（layoutMosaicGrid）とページ割り（renderPreview）で同じ計算を使う。
+const MOSAIC_GAP = 7,
+  MOSAIC_CAPTION = 16,
+  ROW_HEIGHT_CAP = 0.42, // 1段の高さの上限（ページ本文の高さに対する割合）
+  imageRatios = {}; // 画像id → 縦横比（読み込み済みのもの）
+let ratioRefreshTimer = 0;
+function clampRatio(r) {
+  return Math.max(0.3, Math.min(3.5, r || 1.2));
+}
+function isPortraitHeavy(ratios) {
+  return ratios.filter((r) => r < 0.9).length >= Math.ceil(ratios.length / 2);
+}
+function autoRowSizes(count, maxCols) {
+  const sizes = [];
+  let i = 0;
+  while (i < count) {
+    const remaining = count - i;
+    let size = Math.min(maxCols, remaining);
+    if (remaining - size === 1 && size > 2) size -= 1;
+    sizes.push(size);
+    i += size;
+  }
+  return sizes;
+}
+function naturalRowHeight(ratios, width, pageHeight) {
+  const w = Math.max(1, width - MOSAIC_GAP * (ratios.length - 1)),
+    total = ratios.reduce((x, y) => x + y, 0) || 1;
+  return Math.min(w / total, pageHeight * ROW_HEIGHT_CAP);
+}
+// カテゴリの写真を段ごとに分ける（段の手動指定があればそれに従う）
+function imageRows(section, images) {
+  if (section.layoutMode === "manual") {
+    const lastRow = Math.max(
+        1,
+        ...images.map((im) => Number(im.layoutRow) || 1),
+      ),
+      rowOf = (im) => Number(im.layoutRow) || lastRow;
+    return [...new Set(images.map(rowOf))]
+      .sort((x, y) => x - y)
+      .map((rowId) => images.filter((im) => rowOf(im) === rowId));
+  }
+  const ratios = images.map((im) => clampRatio(imageRatios[im.id])),
+    rows = [];
+  let i = 0;
+  for (const size of autoRowSizes(images.length, isPortraitHeavy(ratios) ? 4 : 3)) {
+    rows.push(images.slice(i, i + size));
+    i += size;
+  }
+  return rows;
+}
+// まだ縦横比が分からない画像を読み込み、分かったらページ割りをやり直す
+function loadImageRatios(images) {
+  for (const im of images) {
+    if (!im.src || im.id in imageRatios) continue;
+    imageRatios[im.id] = undefined;
+    const probe = new Image();
+    probe.onload = () => {
+      if (!probe.naturalWidth || !probe.naturalHeight) return;
+      imageRatios[im.id] = probe.naturalWidth / probe.naturalHeight;
+      clearTimeout(ratioRefreshTimer);
+      ratioRefreshTimer = setTimeout(renderPreview, 120);
+    };
+    probe.src = im.src;
+  }
+}
+// ページ本文の大きさ（見出し・キャプションを含む）を、実際のページと同じ幅の見えない見本で測る
+function measurePackedPage(root) {
+  const probe = document.createElement("article");
+  probe.className = "sheet";
+  probe.style.cssText = "position:absolute;visibility:hidden;left:-10000px;top:0";
+  probe.innerHTML =
+    '<div class="sheet-head">見本</div><div class="sheet-content"><div class="packed-sections"><section class="packed-category"><div class="kicker">【見本】</div></section><section class="packed-category"><div class="kicker">【見本】</div></section></div></div>';
+  probe.style.width = (root.clientWidth ? Math.min(root.clientWidth, 730) : 730) + "px";
+  root.appendChild(probe);
+  const sections = probe.querySelector(".packed-sections"),
+    [a, b] = probe.querySelectorAll(".packed-category"),
+    metrics = {
+      width: sections.clientWidth,
+      height: sections.clientHeight,
+      kicker: a.offsetHeight + 2,
+      gap: b.offsetTop - a.offsetTop - a.offsetHeight,
+    };
+  probe.remove();
+  return metrics;
+}
 function layoutMosaicGrid(grid) {
   if (!grid) return;
   const cards =
@@ -3549,16 +3635,13 @@ function layoutMosaicGrid(grid) {
     (grid._mosaicCards = [...grid.querySelectorAll(".board-card")]);
   if (!cards.length) return;
   const ratios = cards.map((card) => {
-      const im = card.querySelector("img"),
-        r =
-          im?.naturalWidth && im?.naturalHeight
-            ? im.naturalWidth / im.naturalHeight
-            : 1.2;
-      return Math.max(0.3, Math.min(3.5, r));
+      const im = card.querySelector("img");
+      if (im?.naturalWidth && im?.naturalHeight)
+        imageRatios[card.dataset.imageId] = im.naturalWidth / im.naturalHeight;
+      return clampRatio(imageRatios[card.dataset.imageId]);
     }),
     section = state.sections.find((s) => s.id === grid.dataset.sectionId),
-    portraits = ratios.filter((r) => r < 0.9).length,
-    portraitHeavy = portraits >= Math.ceil(cards.length / 2),
+    portraitHeavy = isPortraitHeavy(ratios),
     maxCols = portraitHeavy ? 4 : 3;
   grid.classList.toggle("portrait-layout", portraitHeavy);
   let rows = [];
@@ -3585,19 +3668,34 @@ function layoutMosaicGrid(grid) {
     );
     if (changed) persist();
   } else {
-    let i = 0;
-    while (i < cards.length) {
-      const remaining = cards.length - i;
-      let size = Math.min(maxCols, remaining);
-      if (remaining - size === 1 && size > 2) size -= 1;
-      rows.push(cards.slice(i, i + size));
-      i += size;
-    }
+    rows = autoRowSizes(cards.length, maxCols).reduce(
+      (acc, size) => {
+        acc.rows.push(cards.slice(acc.i, acc.i + size));
+        acc.i += size;
+        return acc;
+      },
+      { rows: [], i: 0 },
+    ).rows;
     rows.forEach((row, index) =>
       row.forEach((card) => (card.dataset.layoutRow = String(index + 1))),
     );
   }
-  const rowSizes = rows.map((row) => row.length);
+  // 各段は横幅いっぱいの高さ（上限あり）を基本に、枠に入りきらないときだけ全段を同じ割合で縮める
+  const rowRatioSets = rows.map((row) =>
+      row.map((card) => ratios[cards.indexOf(card)]),
+    ),
+    pageHeight =
+      grid.closest(".packed-sections, .base-page-body")?.clientHeight || 600,
+    naturals = rowRatioSets.map((r) =>
+      naturalRowHeight(r, grid.clientWidth, pageHeight),
+    ),
+    available = Math.max(
+      40,
+      (grid.clientHeight || 480) -
+        MOSAIC_GAP * (rows.length - 1) -
+        MOSAIC_CAPTION * rows.length,
+    ),
+    scale = Math.min(1, available / naturals.reduce((x, y) => x + y, 0));
   grid.querySelectorAll(".mosaic-row").forEach((row) => row.remove());
   for (let rowIndex = 0; rowIndex < rows.length; rowIndex++) {
     const row = rows[rowIndex],
@@ -3606,17 +3704,9 @@ function layoutMosaicGrid(grid) {
     rowEl.dataset.row = String(rowIndex + 1);
     // 写真の縦横比をそのまま使い、上下左右を切らずに並べる
     const rowCards = row,
-      rowRatios = rowCards.map((card) => ratios[cards.indexOf(card)]);
+      rowRatios = rowRatioSets[rowIndex],
+      height = naturals[rowIndex] * scale;
     rowCards.forEach((card) => rowEl.appendChild(card));
-    const width = Math.max(1, grid.clientWidth - 7 * (rowCards.length - 1)),
-      total = rowRatios.reduce((x, y) => x + y, 0),
-      // 各段の下にキャプション（約16px）が付く分を引いて、枠の高さいっぱいまで使う
-      available = Math.max(
-        90,
-        (grid.clientHeight || 480) - 7 * (rows.length - 1) - 16 * rows.length,
-      ),
-      maxHeight = Math.max(94, available / rows.length),
-      height = Math.min(width / total, maxHeight);
     rowCards.forEach((card, i) => {
       card.style.width = rowRatios[i] * height + "px";
       card.style.height = "auto";
@@ -3696,45 +3786,78 @@ function renderPreview() {
       sec.categoryKey ||
       "";
   pages.push({ type: "cover" });
+  const page = measurePackedPage(root);
+  // カテゴリはなるべく1ページに収め、下に空きがあれば次のカテゴリを詰めて置く。
+  // 入りきらないときは、そのページの写真をまとめて少し縮めて収める（MIN_SCALE まで）。
+  // 1カテゴリだけでもそれ以上縮むときだけ、段の切れ目で次のページへ送る。
+  const MIN_SCALE = 0.6;
   function packSections(sections, tabletop, cut) {
-    let blocks = [];
+    // fixed＝見出し・キャプション・すき間（縮まない部分）、flex＝写真の高さ（縮められる部分）
+    const rowFlex = (row) =>
+        naturalRowHeight(
+          row.map((im) => clampRatio(imageRatios[im.id])),
+          page.width,
+          page.height,
+        ),
+      blockOf = (sec, rows, start, continued) => ({
+        s: sec,
+        imgs: rows.flat(),
+        start,
+        continued,
+        fixed:
+          page.kicker +
+          (rows.length ? MOSAIC_CAPTION * rows.length + MOSAIC_GAP * (rows.length - 1) : 60),
+        flex: rows.reduce((sum, row) => sum + rowFlex(row), 0),
+      }),
+      scaleFor = (list) => {
+        const fixed =
+            list.reduce((x, bl) => x + bl.fixed, 0) + page.gap * (list.length - 1),
+          flex = list.reduce((x, bl) => x + bl.flex, 0);
+        return flex ? Math.min(1, (page.height - fixed) / flex) : fixed <= page.height ? 1 : 0;
+      },
+      blocks = [];
     for (const sec of sections) {
       if (sec === tabletop) continue;
-      const chunks = pagesForSection(sec);
-      if (!chunks.length) {
-        blocks.push({
-          s: sec,
-          imgs: [],
-          start: 0,
-          continued: false,
-          weight: 3,
-        });
+      const images = sec.images || [];
+      if (!images.length) {
+        blocks.push(blockOf(sec, [], 0, false));
         continue;
       }
-      for (const chunk of chunks) {
-        const weight = Math.min(9, Math.ceil(chunk.imgs.length / 3) * 3);
-        blocks.push({
-          s: sec,
-          imgs: chunk.imgs,
-          start: chunk.start,
-          continued: chunk.continued,
-          weight,
-        });
+      const rows = imageRows(sec, images),
+        whole = blockOf(sec, rows, 0, false);
+      if (scaleFor([whole]) >= MIN_SCALE) {
+        blocks.push(whole);
+        continue;
       }
+      let chunk = [],
+        start = 0;
+      rows.forEach((row) => {
+        if (
+          chunk.length &&
+          scaleFor([blockOf(sec, [...chunk, row], start, start > 0)]) < MIN_SCALE
+        ) {
+          blocks.push(blockOf(sec, chunk, start, start > 0));
+          start += chunk.flat().length;
+          chunk = [];
+        }
+        chunk.push(row);
+      });
+      if (chunk.length) blocks.push(blockOf(sec, chunk, start, start > 0));
     }
-    let batch = [],
-      weight = 0;
+    let batch = [];
+    const flush = () => {
+      const scale = Math.max(0, scaleFor(batch));
+      batch.forEach((bl) => (bl.height = bl.fixed + bl.flex * scale));
+      pages.push({ type: "packed", cut, blocks: batch, heightBase: page.height });
+      batch = [];
+    };
     for (const block of blocks) {
-      if (batch.length && weight + block.weight > 9) {
-        pages.push({ type: "packed", cut, blocks: batch });
-        batch = [];
-        weight = 0;
-      }
+      if (batch.length && scaleFor([...batch, block]) < MIN_SCALE) flush();
       batch.push(block);
-      weight += block.weight;
     }
-    if (batch.length) pages.push({ type: "packed", cut, blocks: batch });
+    if (batch.length) flush();
   }
+  loadImageRatios(state.sections.flatMap((sec) => sec.images || []));
   groups.forEach((g) => {
     const sections = state.sections.filter(
         (sec) => (sec.sceneGroupId || groups[0].id) === g.id,
@@ -3758,7 +3881,7 @@ function renderPreview() {
             imgs: chunk.imgs,
             start: chunk.start,
             continued: true,
-            weight: 9,
+            fill: true,
           },
         ],
       }),
@@ -3826,7 +3949,9 @@ function renderPreview() {
             .map(
               (block) =>
                 '<section class="packed-category" style="flex:' +
-                block.weight +
+                (block.fill || !p.heightBase
+                  ? "1 1 0"
+                  : "0 1 " + ((block.height / p.heightBase) * 100).toFixed(2) + "%") +
                 '"><div class="kicker">【' +
                 esc(block.s.title) +
                 (block.continued ? "・続き" : "") +
