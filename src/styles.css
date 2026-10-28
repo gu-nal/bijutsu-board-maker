@@ -1228,6 +1228,7 @@ button {
   }
   .topbar,
   .intro,
+  .library,
   .editor,
   .preview-head,
   .footer-note,
@@ -1936,4 +1937,56 @@ button {
 }
 .base-probe {
   height: 0;
+}
+
+
+@media print {
+  .sheet-head {
+    box-sizing: border-box;
+    margin-left: -17mm;
+    margin-right: -17mm;
+    padding-left: 17mm;
+    padding-right: 17mm;
+  }
+
+  .cover-rule {
+    left: -17mm;
+    width: calc(100% + 34mm);
+  }
+
+  .base-page-body {
+    width: 100%;
+    align-items: stretch;
+    box-sizing: border-box;
+  }
+
+  .base-page-body > .kicker {
+    width: 100%;
+    align-self: stretch;
+    box-sizing: border-box;
+  }
+
+  .base-photo {
+    display: block;
+    width: 100%;
+    max-width: 100%;
+    height: auto;
+    max-height: 62%;
+    flex: 0 1 auto;
+    object-fit: contain;
+    margin-left: 0;
+    margin-right: 0;
+  }
+
+  .board-grid,
+  .packed-sections {
+    width: 100%;
+    box-sizing: border-box;
+  }
+
+  .board-card figcaption {
+    box-sizing: border-box;
+    width: 100%;
+    text-align: center;
+  }
 }
