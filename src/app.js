@@ -1457,7 +1457,7 @@ function layoutMosaicGrid(grid) {
           im?.naturalWidth && im?.naturalHeight
             ? im.naturalWidth / im.naturalHeight
             : 1.2;
-      return Math.max(0.7, Math.min(1.8, r));
+      return Math.max(0.3, Math.min(3.5, r));
     }),
     section = state.sections.find((s) => s.id === grid.dataset.sectionId),
     portraits = ratios.filter((r) => r < 0.9).length,
@@ -1507,22 +1507,18 @@ function layoutMosaicGrid(grid) {
       rowEl = document.createElement("div");
     rowEl.className = "mosaic-row";
     rowEl.dataset.row = String(rowIndex + 1);
+    // 写真の縦横比をそのまま使い、上下左右を切らずに並べる
     const rowCards = row,
-      minRatio = rowCards.length === 2 ? 1 : rowCards.length === 3 ? 0.92 : 0.7,
-      rowRatios = rowCards.map((card) =>
-        Math.max(ratios[cards.indexOf(card)], minRatio),
-      );
+      rowRatios = rowCards.map((card) => ratios[cards.indexOf(card)]);
     rowCards.forEach((card) => rowEl.appendChild(card));
     const width = Math.max(1, grid.clientWidth - 7 * (rowCards.length - 1)),
       total = rowRatios.reduce((x, y) => x + y, 0),
+      // 各段の下にキャプション（約16px）が付く分を引いて、枠の高さいっぱいまで使う
       available = Math.max(
         90,
-        (grid.clientHeight || 480) - 7 * (rows.length - 1),
+        (grid.clientHeight || 480) - 7 * (rows.length - 1) - 16 * rows.length,
       ),
-      maxHeight =
-        rowSizes.length === 1
-          ? Math.min(300, available)
-          : Math.max(94, Math.min(168, available / rows.length)),
+      maxHeight = Math.max(94, available / rows.length),
       height = Math.min(width / total, maxHeight);
     rowCards.forEach((card, i) => {
       card.style.width = rowRatios[i] * height + "px";
