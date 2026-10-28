@@ -1557,13 +1557,16 @@ button {
 .base-page-body .kicker {
   margin: 0 0 1.5%;
 }
-/* ベース写真はどのカットも同じ大きさ（横幅いっぱい・4:3）にそろえる。比率が違う写真は中央を基準に少しだけ切る */
+/* ベース写真は横幅いっぱいに、元の縦横比のまま表示する。
+   4:3より縦に長い写真のときだけ、4:3の高さで中央を基準に切る */
+.base-page-body {
+  container-type: inline-size;
+}
 .base-photo {
   display: block;
   width: 100%;
   height: auto;
-  aspect-ratio: 4 / 3;
-  max-height: 62%;
+  max-height: min(75cqw, 62%);
   flex: none;
   object-fit: cover;
   object-position: center;
