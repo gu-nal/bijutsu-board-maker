@@ -233,7 +233,11 @@ button {
   top: var(--column-top, 88px);
   max-height: calc(100vh - var(--column-top, 88px) - 16px);
   overflow-y: auto;
-  overscroll-behavior: contain;
+}
+/* 高さを決めた縦並びの中でパネルが縮んで中身が隠れないようにする */
+.editor > *,
+.preview-wrap > * {
+  flex-shrink: 0;
 }
 .panel {
   background: #fff;
