@@ -1856,3 +1856,33 @@ button {
     display: none;
   }
 }
+
+/* 写真リストの番号とドラッグでの並べ替え */
+.image-thumb {
+  cursor: grab;
+}
+.image-number {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  z-index: 1;
+  min-width: 18px;
+  padding: 2px 4px;
+  border-radius: 9px;
+  background: #fff;
+  box-shadow: 0 1px 3px #0003;
+  color: #333;
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 1.2;
+  text-align: center;
+}
+.image-item.is-dragging {
+  opacity: 0.4;
+}
+.image-item.drop-before {
+  box-shadow: 0 -3px 0 var(--accent, #507b58);
+}
+.image-item.drop-after {
+  box-shadow: 0 3px 0 var(--accent, #507b58);
+}

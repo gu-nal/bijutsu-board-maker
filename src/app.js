@@ -805,16 +805,19 @@ function sectionMarkup(s, idx) {
     '</div><button class="btn small soft candidate-search">無料画像の参考候補を表示</button><div class="candidate-browser">' +
     candidateMarkup(s) +
     '</div><div class="image-list">' +
-    s.images
+    imageRows(s, s.images || [])
+      .flat()
       .map(
         (im, imageIndex) =>
           '<div class="image-item" data-image="' +
           esc(im.id) +
           '"><div class="image-thumb' +
           (im.kind === "video" ? " is-video" : "") +
-          '"><img src="' +
+          '" title="ドラッグして並べ替え"><span class="image-number">' +
+          String(imageIndex + 1).padStart(2, "0") +
+          '</span><img src="' +
           esc(im.src) +
-          '" alt="">' +
+          '" alt="" draggable="false">' +
           (im.kind === "video"
             ? '<button type="button" class="video-play" title="動画を再生">▶</button>'
             : "") +
@@ -828,11 +831,7 @@ function sectionMarkup(s, idx) {
           esc(im.source === "クリップボードから追加" ? "" : im.source || "") +
           '" placeholder="出典・作者・ライセンス">' +
           imageRowSelect(s, im) +
-          '</div><div class="image-controls"><button class="iconbtn move-image-up" aria-label="写真を上へ" title="写真を上へ" ' +
-          (imageIndex === 0 ? "disabled" : "") +
-          '>↑</button><button class="iconbtn move-image-down" aria-label="写真を下へ" title="写真を下へ" ' +
-          (imageIndex === s.images.length - 1 ? "disabled" : "") +
-          '>↓</button><button class="iconbtn delete-image" title="写真を削除">×</button></div></div>',
+          '</div><div class="image-controls"><button class="iconbtn delete-image" title="写真を削除">×</button></div></div>',
       )
       .join("") +
     '</div><div class="url-row"><input class="input image-url" placeholder="画像・動画のURL（YouTube等も可）"><button class="btn small add-url">URL追加</button><label class="btn small file-add">写真・動画を選ぶ<input type="file" accept="image/*,video/*" multiple></label></div><button type="button" class="paste-images" aria-label="コピーした画像を貼り付け">検索先で画像をコピーしたら、ここをクリックして ⌘V<br>候補として追加し、不要なものは × で外せます</button></div></div>'
@@ -1106,24 +1105,62 @@ function renderSections() {
         renderPreview();
       }),
   );
-  root.querySelectorAll(".move-image-up,.move-image-down").forEach(
-    (el) =>
-      (el.onclick = () => {
-        const node = el.closest(".section-editor"),
-          item = el.closest(".image-item"),
-          section = state.sections.find((x) => x.id === node.dataset.id),
-          i = section.images.findIndex((x) => x.id === item.dataset.image),
-          j = i + (el.classList.contains("move-image-up") ? -1 : 1);
-        if (j < 0 || j >= section.images.length) return;
-        [section.images[i], section.images[j]] = [
-          section.images[j],
-          section.images[i],
-        ];
-        persist();
-        renderSections();
-        renderPreview();
-      }),
-  );
+  // 写真はつまみ（番号付きのサムネイル）をドラッグして並べ替える。
+  // 段を手動指定しているときは、落とした先の写真と同じ段に入る。
+  let draggingImage = null;
+  root.querySelectorAll(".image-item").forEach((item) => {
+    const handle = item.querySelector(".image-thumb");
+    handle.addEventListener("pointerdown", () => (item.draggable = true));
+    item.addEventListener("dragstart", (e) => {
+      draggingImage = item;
+      item.classList.add("is-dragging");
+      e.dataTransfer.effectAllowed = "move";
+      e.dataTransfer.setData("text/plain", item.dataset.image);
+    });
+    item.addEventListener("dragend", () => {
+      item.draggable = false;
+      item.classList.remove("is-dragging");
+      draggingImage = null;
+      root
+        .querySelectorAll(".drop-before,.drop-after")
+        .forEach((x) => x.classList.remove("drop-before", "drop-after"));
+    });
+    item.addEventListener("dragover", (e) => {
+      if (
+        !draggingImage ||
+        draggingImage === item ||
+        draggingImage.parentElement !== item.parentElement
+      )
+        return;
+      e.preventDefault();
+      const r = item.getBoundingClientRect(),
+        after = e.clientY > r.top + r.height / 2;
+      item.classList.toggle("drop-after", after);
+      item.classList.toggle("drop-before", !after);
+    });
+    item.addEventListener("dragleave", () =>
+      item.classList.remove("drop-before", "drop-after"),
+    );
+    item.addEventListener("drop", (e) => {
+      if (!draggingImage || draggingImage === item) return;
+      e.preventDefault();
+      const after = item.classList.contains("drop-after"),
+        section = state.sections.find(
+          (x) => x.id === item.closest(".section-editor").dataset.id,
+        ),
+        order = imageRows(section, section.images).flat(),
+        moving = order.find((x) => x.id === draggingImage.dataset.image),
+        target = order.find((x) => x.id === item.dataset.image);
+      if (!section || !moving || !target) return;
+      order.splice(order.indexOf(moving), 1);
+      order.splice(order.indexOf(target) + (after ? 1 : 0), 0, moving);
+      if (section.layoutMode === "manual") moving.layoutRow = target.layoutRow;
+      section.images = order;
+      persist();
+      renderSections();
+      renderPreview();
+    });
+  });
   root
     .querySelectorAll(".candidate-search")
     .forEach(
