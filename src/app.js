@@ -2348,6 +2348,31 @@ document.getElementById("printBtn").onclick = () => {
   if (!state.projectName.trim()) toast("先に案件名を入力してください");
   setTimeout(() => window.print(), 100);
 };
+// いつでも手動で保存できる（自動保存の待ち時間を待たずにすぐ保存し、「過去に作った資料」にも入る）
+async function saveNow() {
+  clearTimeout(saveTimer);
+  try {
+    await saveStateNow();
+    const el = document.getElementById("savedStatus"),
+      t = new Date();
+    el.textContent =
+      "保存しました " +
+      String(t.getHours()).padStart(2, "0") +
+      ":" +
+      String(t.getMinutes()).padStart(2, "0");
+    renderLibrary();
+    toast("保存しました（「過去に作った資料」から開けます）");
+  } catch (e) {
+    toast("保存できませんでした。バックアップをお使いください。");
+  }
+}
+document.getElementById("saveNowBtn").onclick = saveNow;
+document.addEventListener("keydown", (e) => {
+  if ((e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === "s") {
+    e.preventDefault();
+    saveNow();
+  }
+});
 document.getElementById("backupBtn").onclick = async () => {
   // 動画ファイルは state の外にあるので、データURLにしてバックアップに同梱する
   const media = {};
