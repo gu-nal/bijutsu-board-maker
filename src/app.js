@@ -1908,11 +1908,7 @@ function renderPreview() {
   });
   const sheetHead = (cut) =>
     '<div class="sheet-head">' +
-    esc(
-      [state.dishName || state.projectName || "美術資料", cut?.title]
-        .filter(Boolean)
-        .join(" ｜ "),
-    ) +
+    esc(cut?.title || "") +
     "</div>";
   const packedBlocks = (p) =>
     '<div class="packed-sections">' +
