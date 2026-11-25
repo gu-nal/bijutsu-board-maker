@@ -3352,15 +3352,20 @@ function renderSections() {
   root.querySelectorAll(".move-up,.move-down").forEach(
     (el) =>
       (el.onclick = () => {
+        // 同じカットの中で一つ上（下）のカテゴリと入れ替える。後から追加したカテゴリは
+        // 配列の末尾（他カットの後ろ）にあるため、隣の要素ではなく同じカットの隣を探す。
         const node = el.closest(".section-editor"),
           i = state.sections.findIndex((s) => s.id === node.dataset.id),
-          j = i + (el.classList.contains("move-up") ? -1 : 1);
-        if (
-          j < 0 ||
-          j >= state.sections.length ||
-          state.sections[j].sceneGroupId !== state.sections[i].sceneGroupId
+          up = el.classList.contains("move-up"),
+          gid = state.sections[i]?.sceneGroupId;
+        let j = i + (up ? -1 : 1);
+        while (
+          j >= 0 &&
+          j < state.sections.length &&
+          state.sections[j].sceneGroupId !== gid
         )
-          return;
+          j += up ? -1 : 1;
+        if (i < 0 || j < 0 || j >= state.sections.length) return;
         [state.sections[i], state.sections[j]] = [
           state.sections[j],
           state.sections[i],
