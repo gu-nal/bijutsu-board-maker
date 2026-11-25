@@ -2006,3 +2006,15 @@ button {
     text-align: center;
   }
 }
+
+/* 参考写真の段：すき間を変数にして、写真の幅（%指定）の計算と同じ値を使う */
+.mosaic-row {
+  --mosaic-gap: 7px;
+  gap: var(--mosaic-gap);
+}
+@media print {
+  .mosaic-row {
+    --mosaic-gap: 2mm;
+    gap: var(--mosaic-gap);
+  }
+}

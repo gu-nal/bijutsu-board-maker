@@ -1621,11 +1621,11 @@ function ensureSceneGroups() {
 // プレビュー（layoutMosaicGrid）とページ割り（renderPreview）で同じ計算を使う。
 const MOSAIC_GAP = 7,
   MOSAIC_CAPTION = 16,
-  ROW_HEIGHT_CAP = 0.42, // 1段の高さの上限（ページ本文の高さに対する割合）
   imageRatios = {}; // 画像id → 縦横比（読み込み済みのもの）
 let ratioRefreshTimer = 0;
+// 写真の縦横比はそのまま使う（読み込み前で分からないときだけ仮に 1.2）
 function clampRatio(r) {
-  return Math.max(0.3, Math.min(3.5, r || 1.2));
+  return r > 0 && Number.isFinite(r) ? r : 1.2;
 }
 function isPortraitHeavy(ratios) {
   return ratios.filter((r) => r < 0.9).length >= Math.ceil(ratios.length / 2);
@@ -1645,7 +1645,8 @@ function autoRowSizes(count, maxCols) {
 function naturalRowHeight(ratios, width, pageHeight) {
   const w = Math.max(1, width - MOSAIC_GAP * (ratios.length - 1)),
     total = ratios.reduce((x, y) => x + y, 0) || 1;
-  return Math.min(w / total, pageHeight * ROW_HEIGHT_CAP);
+  // 段の写真の合計幅（すき間込み）が参考写真エリアの横幅ちょうどになる高さ
+  return w / total;
 }
 // カテゴリの写真を段ごとに分ける（段の手動指定があればそれに従う）
 function imageRows(section, images) {
@@ -1763,14 +1764,22 @@ function layoutMosaicGrid(grid) {
       row.forEach((card) => (card.dataset.layoutRow = String(index + 1))),
     );
   }
-  // 各段は横幅いっぱいの高さ（上限あり）を基本に、枠に入りきらないときだけ全段を同じ割合で縮める
+  // 各段は、すき間を含めた合計幅が参考写真エリアの横幅ちょうどになる高さにする。
+  // 縦横比は変えない。枠（ページ）に入りきらないとき（1段だけで1ページを超える等）だけ全段を同じ割合で縮める。
+  grid.querySelectorAll(".mosaic-row").forEach((row) => row.remove());
+  const probeRow = document.createElement("div");
+  probeRow.className = "mosaic-row";
+  grid.appendChild(probeRow);
+  const rowGap = parseFloat(getComputedStyle(probeRow).columnGap) || MOSAIC_GAP,
+    gridWidth = Math.max(1, grid.clientWidth - 0.5);
+  probeRow.remove();
   const rowRatioSets = rows.map((row) =>
       row.map((card) => ratios[cards.indexOf(card)]),
     ),
-    pageHeight =
-      grid.closest(".packed-sections, .base-page-body")?.clientHeight || 600,
-    naturals = rowRatioSets.map((r) =>
-      naturalRowHeight(r, grid.clientWidth, pageHeight),
+    naturals = rowRatioSets.map(
+      (r) =>
+        Math.max(1, gridWidth - rowGap * (r.length - 1)) /
+        (r.reduce((x, y) => x + y, 0) || 1),
     ),
     available = Math.max(
       40,
@@ -1778,23 +1787,35 @@ function layoutMosaicGrid(grid) {
         MOSAIC_GAP * (rows.length - 1) -
         MOSAIC_CAPTION * rows.length,
     ),
-    scale = Math.min(1, available / naturals.reduce((x, y) => x + y, 0));
-  grid.querySelectorAll(".mosaic-row").forEach((row) => row.remove());
+    total = naturals.reduce((x, y) => x + y, 0),
+    scale = total > available + 4 ? available / total : 1;
+
   for (let rowIndex = 0; rowIndex < rows.length; rowIndex++) {
     const row = rows[rowIndex],
       rowEl = document.createElement("div");
     rowEl.className = "mosaic-row";
     rowEl.dataset.row = String(rowIndex + 1);
     // 写真の縦横比をそのまま使い、上下左右を切らずに並べる
+    // 幅は「参考写真エリアの横幅 − すき間」を縦横比で割り振る割合（%）で指定する。
+    // px で固定しないので、画面のプレビューでも印刷（PDF）でもエリアの横幅いっぱいになる。
     const rowCards = row,
       rowRatios = rowRatioSets[rowIndex],
-      height = naturals[rowIndex] * scale;
+      ratioSum = rowRatios.reduce((x, y) => x + y, 0) || 1,
+      gaps = rowCards.length - 1;
     rowCards.forEach((card) => rowEl.appendChild(card));
     rowCards.forEach((card, i) => {
-      card.style.width = rowRatios[i] * height + "px";
+      card.style.width =
+        "calc((100% - " +
+        gaps +
+        " * var(--mosaic-gap, 7px)) * " +
+        ((rowRatios[i] / ratioSum) * scale).toFixed(6) +
+        ")";
       card.style.height = "auto";
       const img = card.querySelector("img");
-      if (img) img.style.height = height + "px";
+      if (img) {
+        img.style.height = "auto";
+        img.style.aspectRatio = String(rowRatios[i]);
+      }
       const editor = [...document.querySelectorAll(".section-editor")].find(
           (node) => node.dataset.id === grid.dataset.sectionId,
         ),
@@ -1873,7 +1894,7 @@ function renderPreview() {
   // カテゴリはなるべく1ページに収め、下に空きがあれば次のカテゴリを詰めて置く。
   // 入りきらないときは、そのページの写真をまとめて少し縮めて収める（MIN_SCALE まで）。
   // 1カテゴリだけでもそれ以上縮むときだけ、段の切れ目で次のページへ送る。
-  const MIN_SCALE = 0.6;
+  const MIN_SCALE = 1; // 横幅いっぱいを保つため縮めない（1段だけで1ページを超えるときだけ例外的に縮める）
   // ベース写真の下の空き（＝1ページ目にカテゴリを詰められる高さ）
   function baseCapacity(cut) {
     const r = cut.base ? imageRatios["base:" + cut.id] : 0,
