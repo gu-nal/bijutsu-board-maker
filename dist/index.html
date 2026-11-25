@@ -285,6 +285,22 @@ button {
 .scene-group-head .step {
   flex: none;
 }
+.scene-drag {
+  cursor: grab;
+}
+.move-scene-group:disabled {
+  opacity: 0.25;
+  cursor: default;
+}
+.scene-group.is-dragging {
+  opacity: 0.45;
+}
+.scene-group.drop-before {
+  box-shadow: 0 -3px 0 var(--accent, #507b58);
+}
+.scene-group.drop-after {
+  box-shadow: 0 3px 0 var(--accent, #507b58);
+}
 .scene-group-title {
   flex: 1;
   min-width: 0;
@@ -3105,7 +3121,7 @@ function renderSections() {
           (g.collapsed ? " is-collapsed" : "") +
           '" data-group-id="' +
           esc(g.id) +
-          '"><div class="scene-group-head"><span class="step">' +
+          '"><div class="scene-group-head"><span class="step scene-drag" draggable="true" title="ドラッグして順番を入れ替え">' +
           (gi + 1) +
           '</span><input class="scene-group-title" data-group-title="' +
           esc(g.id) +
@@ -3117,7 +3133,11 @@ function renderSections() {
           (g.collapsed ? "開く" : "折りたたむ") +
           '">' +
           (g.collapsed ? "›" : "⌄") +
-          '</button><button class="iconbtn delete-scene-group" type="button" title="カットを削除">×</button></div><div class="scene-group-body">' +
+          '</button><button class="iconbtn move-scene-group" type="button" data-move="-1" title="上へ"' +
+          (gi === 0 ? " disabled" : "") +
+          '>↑</button><button class="iconbtn move-scene-group" type="button" data-move="1" title="下へ"' +
+          (gi === state.sceneGroups.length - 1 ? " disabled" : "") +
+          '>↓</button><button class="iconbtn delete-scene-group" type="button" title="カットを削除">×</button></div><div class="scene-group-body">' +
           cutBaseMarkup(g) +
           state.sections
             .filter(
@@ -3156,6 +3176,65 @@ function renderSections() {
         el.title = collapsed ? "開く" : "折りたたむ";
       }),
   );
+  // カットの並べ替え（↑↓ボタン／番号をドラッグ）。カテゴリは sceneGroupId で紐づくので一緒に動く。
+  const moveSceneGroup = (gid, to) => {
+    const from = state.sceneGroups.findIndex((g) => g.id === gid);
+    if (from < 0 || to < 0 || to >= state.sceneGroups.length || to === from)
+      return;
+    const [g] = state.sceneGroups.splice(from, 1);
+    state.sceneGroups.splice(to, 0, g);
+    persist();
+    renderSections();
+    renderPreview();
+  };
+  root.querySelectorAll(".move-scene-group").forEach(
+    (el) =>
+      (el.onclick = (e) => {
+        e.stopPropagation();
+        const gid = el.closest(".scene-group").dataset.groupId,
+          i = state.sceneGroups.findIndex((g) => g.id === gid);
+        moveSceneGroup(gid, i + Number(el.dataset.move));
+      }),
+  );
+  let draggingScene = null;
+  root.querySelectorAll(".scene-drag").forEach((el) => {
+    el.addEventListener("dragstart", (e) => {
+      draggingScene = el.closest(".scene-group").dataset.groupId;
+      e.dataTransfer.effectAllowed = "move";
+      e.dataTransfer.setData("text/plain", "scene:" + draggingScene);
+      el.closest(".scene-group").classList.add("is-dragging");
+    });
+    el.addEventListener("dragend", () => {
+      draggingScene = null;
+      root
+        .querySelectorAll(".scene-group")
+        .forEach((x) => x.classList.remove("is-dragging", "drop-before", "drop-after"));
+    });
+  });
+  root.querySelectorAll(".scene-group").forEach((group) => {
+    group.addEventListener("dragover", (e) => {
+      if (!draggingScene) return;
+      e.preventDefault();
+      const r = group.getBoundingClientRect(),
+        after = e.clientY > r.top + r.height / 2;
+      group.classList.toggle("drop-before", !after);
+      group.classList.toggle("drop-after", after);
+    });
+    group.addEventListener("dragleave", () =>
+      group.classList.remove("drop-before", "drop-after"),
+    );
+    group.addEventListener("drop", (e) => {
+      if (!draggingScene) return;
+      e.preventDefault();
+      e.stopPropagation();
+      const after = group.classList.contains("drop-after"),
+        from = state.sceneGroups.findIndex((g) => g.id === draggingScene);
+      let to = state.sceneGroups.findIndex((g) => g.id === group.dataset.groupId);
+      if (after) to += 1;
+      if (from < to) to -= 1;
+      moveSceneGroup(draggingScene, to);
+    });
+  });
   root.querySelectorAll(".delete-scene-group").forEach(
     (el) =>
       (el.onclick = () => {

@@ -274,6 +274,22 @@ button {
 .scene-group-head .step {
   flex: none;
 }
+.scene-drag {
+  cursor: grab;
+}
+.move-scene-group:disabled {
+  opacity: 0.25;
+  cursor: default;
+}
+.scene-group.is-dragging {
+  opacity: 0.45;
+}
+.scene-group.drop-before {
+  box-shadow: 0 -3px 0 var(--accent, #507b58);
+}
+.scene-group.drop-after {
+  box-shadow: 0 3px 0 var(--accent, #507b58);
+}
 .scene-group-title {
   flex: 1;
   min-width: 0;
